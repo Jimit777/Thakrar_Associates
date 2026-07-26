@@ -6,40 +6,52 @@ import { createClient } from "@/lib/supabase/server";
 
 export type AuthState = { error?: string; message?: string };
 
-function readCredentials(formData: FormData) {
-  return {
-    email: String(formData.get("email") ?? "").trim(),
-    password: String(formData.get("password") ?? ""),
-  };
-}
-
-export async function signIn(
+/**
+ * Sign in and sign up share one action so the page only ever has a single
+ * result to display — otherwise a stale error from one can mask the other.
+ * Which one runs is decided by the button the user clicked.
+ */
+export async function authenticate(
   _prevState: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
+  const intent = String(formData.get("intent") ?? "signin");
+  const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+
+  if (!email || !password) return { error: "Enter your email and password." };
+
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword(
-    readCredentials(formData),
-  );
 
-  if (error) return { error: error.message };
+  if (intent === "signup") {
+    const { data, error } = await supabase.auth.signUp({ email, password });
 
-  revalidatePath("/", "layout");
-  redirect("/");
-}
+    if (error) return { error: error.message };
 
-export async function signUp(
-  _prevState: AuthState,
-  formData: FormData,
-): Promise<AuthState> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp(readCredentials(formData));
+    // No session means Supabase is waiting for the email to be confirmed.
+    if (!data.session) {
+      return {
+        message:
+          "Account created, but it needs confirming before you can sign in. Either click the link Supabase emailed you, or turn off Authentication → Sign In / Providers → Email → Confirm email in your Supabase project.",
+      };
+    }
+  } else {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-  if (error) return { error: error.message };
-
-  // When email confirmation is on, Supabase returns a user with no session.
-  if (!data.session) {
-    return { message: "Check your email to confirm your account, then sign in." };
+    if (error) {
+      // Supabase deliberately returns the same message for a wrong password
+      // and an unconfirmed account, so point at both.
+      if (error.message === "Invalid login credentials") {
+        return {
+          error:
+            "Wrong email or password — or the account exists but hasn't been confirmed yet.",
+        };
+      }
+      return { error: error.message };
+    }
   }
 
   revalidatePath("/", "layout");
