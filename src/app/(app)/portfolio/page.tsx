@@ -1,16 +1,19 @@
 import { PageHeading, EmptyState } from "@/components/page-heading";
 import { AddHoldingForm } from "@/components/add-holding-form";
 import { HoldingsTable } from "@/components/holdings-table";
+import { RefreshPricesButton } from "@/components/refresh-prices-button";
 import { createClient } from "@/lib/supabase/server";
-import { formatCurrency } from "@/lib/format";
-import { investedValue, type Holding } from "@/types/holding";
+import { formatCurrency, formatPercent } from "@/lib/format";
+import { currentValue, investedValue, type Holding } from "@/types/holding";
 
 export default async function PortfolioPage() {
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("holdings")
-    .select("id, symbol, exchange, quantity, avg_price, buy_date, last_price, last_refreshed_at")
+    .select(
+      "id, symbol, exchange, quantity, avg_price, buy_date, last_price, last_refreshed_at",
+    )
     .order("symbol");
 
   // Postgres returns `numeric` as a string, so convert before doing any maths.
@@ -26,11 +29,38 @@ export default async function PortfolioPage() {
     0,
   );
 
+  // Only holdings with a fetched price count towards the current value, so a
+  // failed lookup can't silently understate the total.
+  const priced = holdings.filter((holding) => holding.last_price !== null);
+  const totalCurrent = priced.reduce(
+    (sum, holding) => sum + (currentValue(holding) ?? 0),
+    0,
+  );
+  const pricedInvested = priced.reduce(
+    (sum, holding) => sum + investedValue(holding),
+    0,
+  );
+  const totalPnl = totalCurrent - pricedInvested;
+  const totalPnlPercent =
+    pricedInvested === 0 ? 0 : (totalPnl / pricedInvested) * 100;
+
+  const lastRefreshedAt =
+    holdings
+      .map((holding) => holding.last_refreshed_at)
+      .filter((value): value is string => value !== null)
+      .sort()
+      .at(-1) ?? null;
+
   return (
     <>
       <PageHeading
         title="Portfolio"
         subtitle="Your holdings, entered manually and priced on demand."
+        action={
+          holdings.length > 0 ? (
+            <RefreshPricesButton lastRefreshedAt={lastRefreshedAt} />
+          ) : undefined
+        }
       />
 
       <AddHoldingForm />
@@ -48,17 +78,48 @@ export default async function PortfolioPage() {
           />
         ) : (
           <>
-            <div className="mb-3 flex items-baseline justify-between">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
               <h2 className="text-base font-medium">
                 {holdings.length} holding{holdings.length === 1 ? "" : "s"}
               </h2>
-              <p className="text-sm text-muted">
-                Total invested{" "}
-                <span className="figure text-foreground">
-                  {formatCurrency(totalInvested)}
+              <div className="flex flex-wrap gap-x-6 text-sm text-muted">
+                <span>
+                  Invested{" "}
+                  <span className="figure text-foreground">
+                    {formatCurrency(totalInvested)}
+                  </span>
                 </span>
-              </p>
+                {priced.length > 0 && (
+                  <>
+                    <span>
+                      Value{" "}
+                      <span className="figure text-foreground">
+                        {formatCurrency(totalCurrent)}
+                      </span>
+                    </span>
+                    <span>
+                      P&amp;L{" "}
+                      <span
+                        className={`figure ${
+                          totalPnl >= 0 ? "text-positive" : "text-negative"
+                        }`}
+                      >
+                        {formatCurrency(totalPnl)} (
+                        {formatPercent(totalPnlPercent)})
+                      </span>
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
+
+            {priced.length > 0 && priced.length < holdings.length && (
+              <p className="mb-3 text-xs text-muted">
+                Totals cover the {priced.length} of {holdings.length} holdings
+                that have a price. Refresh again to fill in the rest.
+              </p>
+            )}
+
             <HoldingsTable holdings={holdings} />
           </>
         )}

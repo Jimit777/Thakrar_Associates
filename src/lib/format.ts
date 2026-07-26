@@ -7,6 +7,11 @@ export function formatCurrency(value: number) {
   }).format(value);
 }
 
+/** Percentages, always signed so gains and losses read clearly. */
+export function formatPercent(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+}
+
 /** Share counts: whole numbers stay whole, fractions keep their decimals. */
 export function formatQuantity(value: number) {
   return new Intl.NumberFormat("en-IN", {

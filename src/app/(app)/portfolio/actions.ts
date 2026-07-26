@@ -2,9 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { fetchQuotes } from "@/lib/prices";
 import type { Exchange } from "@/types/holding";
 
 export type HoldingFormState = { error?: string; success?: boolean };
+
+export type RefreshState = {
+  error?: string;
+  updated?: number;
+  failed?: string[];
+};
 
 type ParsedHolding = {
   symbol: string;
@@ -105,6 +112,53 @@ export async function updateHolding(
   revalidatePath("/portfolio");
   revalidatePath("/");
   return { success: true };
+}
+
+/**
+ * Looks up the latest price for every holding and stores it. Runs only when
+ * the user presses the button — nothing here is automatic or live.
+ */
+export async function refreshPrices(): Promise<RefreshState> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("holdings")
+    .select("id, symbol, exchange");
+
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { updated: 0, failed: [] };
+
+  const quotes = await fetchQuotes(
+    data.map((row) => ({
+      symbol: row.symbol,
+      exchange: row.exchange as Exchange,
+    })),
+  );
+
+  const refreshedAt = new Date().toISOString();
+  const failed: string[] = [];
+  let updated = 0;
+
+  for (const row of data) {
+    const quote = quotes.get(`${row.symbol}:${row.exchange}`);
+
+    if (!quote) {
+      failed.push(row.symbol);
+      continue;
+    }
+
+    const { error: updateError } = await supabase
+      .from("holdings")
+      .update({ last_price: quote.price, last_refreshed_at: refreshedAt })
+      .eq("id", row.id);
+
+    if (updateError) failed.push(row.symbol);
+    else updated += 1;
+  }
+
+  revalidatePath("/portfolio");
+  revalidatePath("/");
+  return { updated, failed };
 }
 
 export async function deleteHolding(formData: FormData) {

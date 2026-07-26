@@ -6,8 +6,13 @@ import {
   updateHolding,
   type HoldingFormState,
 } from "@/app/(app)/portfolio/actions";
-import { formatCurrency, formatQuantity } from "@/lib/format";
-import { investedValue, type Holding } from "@/types/holding";
+import { formatCurrency, formatQuantity, formatPercent } from "@/lib/format";
+import {
+  currentValue,
+  investedValue,
+  profitAndLoss,
+  type Holding,
+} from "@/types/holding";
 
 const initialState: HoldingFormState = {};
 
@@ -20,14 +25,16 @@ export function HoldingsTable({ holdings }: { holdings: Holding[] }) {
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full min-w-3xl border-collapse bg-surface">
+      <table className="w-full min-w-4xl border-collapse bg-surface">
         <thead>
           <tr className="border-b border-border bg-surface-sunken text-left">
             <th className={`${cellClass} stat-label`}>Stock</th>
             <th className={`${cellClass} stat-label text-right`}>Quantity</th>
             <th className={`${cellClass} stat-label text-right`}>Avg price</th>
             <th className={`${cellClass} stat-label text-right`}>Invested</th>
-            <th className={`${cellClass} stat-label`}>Buy date</th>
+            <th className={`${cellClass} stat-label text-right`}>Price</th>
+            <th className={`${cellClass} stat-label text-right`}>Value</th>
+            <th className={`${cellClass} stat-label text-right`}>P&amp;L</th>
             <th className={`${cellClass} stat-label text-right`}>Actions</th>
           </tr>
         </thead>
@@ -61,6 +68,17 @@ function DisplayRow({
   holding: Holding;
   onEdit: () => void;
 }) {
+  const value = currentValue(holding);
+  const pnl = profitAndLoss(holding);
+  const pnlColour =
+    pnl === null
+      ? ""
+      : pnl.amount > 0
+        ? "text-positive"
+        : pnl.amount < 0
+          ? "text-negative"
+          : "";
+
   return (
     <tr className="border-b border-border last:border-0">
       <td className={cellClass}>
@@ -76,8 +94,29 @@ function DisplayRow({
       <td className={`${cellClass} figure text-right`}>
         {formatCurrency(investedValue(holding))}
       </td>
-      <td className={`${cellClass} figure text-muted`}>
-        {holding.buy_date ?? "—"}
+      <td className={`${cellClass} figure text-right`}>
+        {holding.last_price === null ? (
+          <span className="text-muted">—</span>
+        ) : (
+          formatCurrency(holding.last_price)
+        )}
+      </td>
+      <td className={`${cellClass} figure text-right`}>
+        {value === null ? (
+          <span className="text-muted">—</span>
+        ) : (
+          formatCurrency(value)
+        )}
+      </td>
+      <td className={`${cellClass} figure text-right ${pnlColour}`}>
+        {pnl === null ? (
+          <span className="text-muted">—</span>
+        ) : (
+          <>
+            <div>{formatCurrency(pnl.amount)}</div>
+            <div className="text-xs">{formatPercent(pnl.percent)}</div>
+          </>
+        )}
       </td>
       <td className={`${cellClass} text-right`}>
         <div className="flex justify-end gap-2">
@@ -172,10 +211,6 @@ function EditRow({
         />
       </td>
 
-      <td className={`${cellClass} text-right text-xs text-muted`}>
-        recalculated on save
-      </td>
-
       <td className={cellClass}>
         <input
           name="buy_date"
@@ -186,7 +221,14 @@ function EditRow({
         />
       </td>
 
-      <td className={`${cellClass} text-right`}>
+      <td
+        className={`${cellClass} text-right text-xs text-muted`}
+        colSpan={2}
+      >
+        refresh again after saving
+      </td>
+
+      <td className={`${cellClass} text-right`} colSpan={2}>
         <form id="edit-holding" action={formAction} />
         <div className="flex justify-end gap-2">
           <button
