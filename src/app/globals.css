@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+/*
+ * Light mode only. `color-scheme: light` stops the browser from auto-darkening
+ * form controls and scrollbars if the user's device is set to dark mode.
+ */
+:root {
+  color-scheme: light;
+
+  --background: #fffaf5; /* warm off-white page */
+  --surface: #fffdfb; /* cards, tables */
+  --surface-sunken: #fdf4ec; /* table headers, subtle bands */
+
+  --foreground: #7c2d12; /* dark orange — main text */
+  --muted: #a4552a; /* secondary text and labels */
+  --accent: #c2410c; /* buttons, links, active state */
+  --border: #f0d6bf;
+
+  --positive: #15803d; /* gains */
+  --negative: #b91c1c; /* losses */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+
+  --font-sans: var(--font-body);
+  --font-display: var(--font-body);
+  --font-mono: var(--font-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body), system-ui, sans-serif;
+}
+
+/*
+ * Josefin Sans has a small x-height, so headings get slightly tighter spacing
+ * to keep them looking deliberate rather than airy.
+ */
+h1,
+h2,
+h3 {
+  font-family: var(--font-body), system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* Small uppercase labels above figures — a common finance-UI pattern. */
+.stat-label {
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Figures: monospace with aligned digits. */
+.figure {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+}
