@@ -12,6 +12,7 @@ export type ExtractResult =
       ok: true;
       extraction: Extraction;
       model: string;
+      filtered: { expected: "annual" | "quarterly" | null; dropped: number };
       pageInfo: { trimmed: boolean; reason: string; selectedPages: number[]; totalPages: number };
     }
   | { ok: false; error: string };
@@ -77,10 +78,24 @@ export async function extractFinancials(
       },
       model,
     );
+    // Enforced rather than trusted to the model. Only quarterly filings are
+    // filtered: their Q4 editions print full-year figures that would compete
+    // with the annual report's. An annual report's quarterly tables compete
+    // with nothing, so they are kept.
+    const expected =
+      document.kind === "quarterly_result" ? ("quarterly" as const) : null;
+
+    const kept = expected
+      ? extraction.periods.filter((period) => period.period_type === expected)
+      : extraction.periods;
+
+    const dropped = extraction.periods.length - kept.length;
+
     return {
       ok: true,
-      extraction,
+      extraction: { ...extraction, periods: kept },
       model,
+      filtered: { expected, dropped },
       pageInfo: {
         trimmed: selection.trimmed,
         reason: selection.reason,

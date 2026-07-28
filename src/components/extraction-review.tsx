@@ -63,6 +63,10 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
     selectedPages: number[];
     totalPages: number;
   } | null>(null);
+  const [filtered, setFiltered] = useState<{
+    expected: "annual" | "quarterly" | null;
+    dropped: number;
+  } | null>(null);
 
   function runExtraction() {
     setError(null);
@@ -77,6 +81,7 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
         });
         setUsedModel(result.model);
         setPageInfo(result.pageInfo);
+        setFiltered(result.filtered);
       } else {
         setError(result.error);
       }
@@ -193,19 +198,51 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
           </button>
         </header>
 
-        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-sm">
-          <span className="text-muted">
-            Unit <span className="figure text-foreground">{draft.currency_unit}</span>
-          </span>
-          <span className="text-muted">
-            Basis <span className="text-foreground">{draft.basis}</span>
-          </span>
-          <span className="text-muted">
+        <div className="mt-4 flex flex-wrap items-end gap-x-6 gap-y-3 text-sm">
+          <label className="flex flex-col gap-1">
+            <span className="stat-label">Unit</span>
+            <input
+              value={draft.currency_unit}
+              onChange={(event) =>
+                setDraft((current) =>
+                  current
+                    ? { ...current, currency_unit: event.target.value }
+                    : current,
+                )
+              }
+              placeholder="INR crore"
+              className="figure w-40 rounded border border-border bg-surface px-2 py-1 text-sm outline-none focus:border-accent"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="stat-label">Reporting basis</span>
+            <select
+              value={draft.basis}
+              onChange={(event) =>
+                setDraft((current) =>
+                  current
+                    ? {
+                        ...current,
+                        basis: event.target.value as Extraction["basis"],
+                      }
+                    : current,
+                )
+              }
+              className="w-44 rounded border border-border bg-surface px-2 py-1 text-sm outline-none focus:border-accent"
+            >
+              <option value="consolidated">Consolidated</option>
+              <option value="standalone">Standalone</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </label>
+
+          <span className="pb-1 text-muted">
             Periods found{" "}
             <span className="figure text-foreground">{draft.periods.length}</span>
           </span>
           {usedModel && (
-            <span className="text-muted">
+            <span className="pb-1 text-muted">
               Read by{" "}
               <span className="text-foreground">
                 {EXTRACTION_MODELS.find((option) => option.id === usedModel)?.label ??
@@ -215,8 +252,29 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
           )}
         </div>
 
+        {draft.basis === "unknown" && (
+          <p className="mt-3 rounded-md border border-negative/40 bg-surface-sunken p-3 text-sm">
+            The report didn&apos;t make clear whether these are consolidated or
+            standalone figures. Set it above if you know — saving it as
+            &ldquo;unknown&rdquo; makes it hard to compare against other periods
+            later.
+          </p>
+        )}
+
+        {filtered && filtered.dropped > 0 && (
+          <p className="mt-3 rounded-md border border-border bg-surface-sunken p-3 text-sm leading-relaxed">
+            <span className="stat-label">Periods left out</span>
+            <br />
+            {filtered.dropped} full-year period
+            {filtered.dropped === 1 ? " was" : "s were"} found in this quarterly
+            filing but not kept. Q4 filings print the full-year audited figures
+            too, and those are taken from the annual report instead so the two
+            can&apos;t disagree.
+          </p>
+        )}
+
         {pageInfo && (
-          <p className="mt-4 rounded-md border border-border bg-surface-sunken p-3 text-sm leading-relaxed">
+          <p className="mt-3 rounded-md border border-border bg-surface-sunken p-3 text-sm leading-relaxed">
             <span className="stat-label">Pages read</span>
             <br />
             {pageInfo.reason}

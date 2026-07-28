@@ -31,8 +31,18 @@ export function SavedFinancials({ rows }: { rows: FinancialRow[] }) {
   if (rows.length === 0) return null;
 
   const visible = view === "annual" ? annual : quarterly;
-  const unit = rows.find((row) => row.currency_unit)?.currency_unit ?? null;
   const ratiosByRow = visible.map((row) => computeRatios(row.data));
+
+  // Periods can carry different units or reporting bases. Comparing across
+  // those without saying so would silently mislead, so surface it instead of
+  // labelling the whole table with one row's unit.
+  const units = [
+    ...new Set(visible.map((row) => row.currency_unit).filter(Boolean)),
+  ] as string[];
+  const bases = [...new Set(visible.map((row) => row.basis))];
+  const mixedUnits = units.length > 1;
+  const mixedBases = bases.length > 1;
+  const unit = units.length === 1 ? units[0] : null;
 
   return (
     <section className="mt-8">
@@ -66,9 +76,37 @@ export function SavedFinancials({ rows }: { rows: FinancialRow[] }) {
         </div>
 
         <p className="text-sm text-muted">
-          {unit ? `Figures in ${unit}` : "Units as reported"}
+          {unit ? `Figures in ${unit}` : "Units shown per period"}
         </p>
       </div>
+
+      {(mixedUnits || mixedBases) && visible.length > 1 && (
+        <div className="mb-3 rounded-md border border-negative/40 bg-surface-sunken p-3 text-sm">
+          <p className="font-medium text-negative">
+            These columns aren&apos;t directly comparable
+          </p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted">
+            {mixedUnits && (
+              <li>
+                Different units: {units.join(" and ")}. A figure in lakh is 100×
+                smaller than the same figure in crore.
+              </li>
+            )}
+            {mixedBases && (
+              <li>
+                Different reporting bases: {bases.join(" and ")}. Standalone
+                covers the parent company only; consolidated includes
+                subsidiaries, so the two can differ by a lot. &ldquo;Unknown&rdquo;
+                means the report didn&apos;t make it clear.
+              </li>
+            )}
+          </ul>
+          <p className="mt-1 text-muted">
+            Delete the period you don&apos;t want, or re-extract it so both are on
+            the same basis.
+          </p>
+        </div>
+      )}
 
       {visible.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted">
@@ -84,8 +122,11 @@ export function SavedFinancials({ rows }: { rows: FinancialRow[] }) {
                   {visible.map((row) => (
                     <th key={row.id} className="stat-label px-4 py-3 text-right">
                       {row.period_label}
-                      <span className="ml-1 font-normal normal-case tracking-normal">
-                        ({row.basis})
+                      <span className="block font-normal normal-case tracking-normal text-muted">
+                        {row.basis}
+                        {mixedUnits && row.currency_unit
+                          ? ` · ${row.currency_unit}`
+                          : ""}
                       </span>
                     </th>
                   ))}

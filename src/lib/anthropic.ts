@@ -24,6 +24,21 @@ function getClient() {
  * shaped correctly — but the numbers themselves still need a human check,
  * which is what the review step is for.
  */
+/**
+ * A Q4 filing prints the full-year audited figures alongside the quarter, which
+ * would compete with the annual report's own numbers for the same year. Annual
+ * reports have no such conflict, so anything they contain is worth keeping.
+ */
+function periodInstruction(kind: string) {
+  if (kind === "annual_report") {
+    return "This is an annual report. Extract every period it reports — full years including prior-year comparatives, and any quarterly tables it contains as well.";
+  }
+  if (kind === "quarterly_result") {
+    return "This is a quarterly filing. Extract only quarterly periods (Q1 FY2025, Q2 FY2025 and so on), including the prior-year quarter shown for comparison. Q4 filings usually also print full-year audited figures — ignore those, as full-year figures are taken from the annual report instead.";
+  }
+  return "Extract every period the document reports.";
+}
+
 export async function extractFinancialsFromPdf(
   pdfBase64: string,
   context: { symbol: string; periodLabel: string; kind: string },
@@ -52,7 +67,7 @@ export async function extractFinancialsFromPdf(
           },
           {
             type: "text",
-            text: `This is a ${context.kind.replace(/_/g, " ")} for ${context.symbol}, labelled ${context.periodLabel}. Extract the income statement figures for every period it reports.`,
+            text: `This document is for ${context.symbol}, labelled ${context.periodLabel}.\n\n${periodInstruction(context.kind)}`,
           },
         ],
       },
