@@ -2,6 +2,24 @@ import { extractText, getDocumentProxy } from "unpdf";
 import { PDFDocument } from "pdf-lib";
 
 /**
+ * The PDF reader calls Math.sumPrecise, which this Node version doesn't have.
+ * It throws internally on every page, filling the log with warnings and losing
+ * whatever positioning maths depended on it. A plain sum is close enough for
+ * deciding which pages to keep.
+ */
+const mathWithSum = Math as typeof Math & {
+  sumPrecise?: (values: Iterable<number>) => number;
+};
+
+if (typeof mathWithSum.sumPrecise !== "function") {
+  mathWithSum.sumPrecise = (values: Iterable<number>) => {
+    let total = 0;
+    for (const value of values) total += value;
+    return total;
+  };
+}
+
+/**
  * An annual report is mostly narrative: directors' reports, ESG sections,
  * notices. The financial statements are usually 10–30 pages of it.
  *

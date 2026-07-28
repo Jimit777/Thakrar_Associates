@@ -96,6 +96,11 @@ export const PeriodSchema = z.object({
     .string()
     .describe("The period, written as FY2024 for a year or Q2 FY2025 for a quarter."),
   period_type: z.enum(["annual", "quarterly"]),
+  basis: z
+    .enum(["consolidated", "standalone", "unknown"])
+    .describe(
+      "Whether these particular figures are consolidated or standalone. A report that presents both produces two entries for the same period — one of each.",
+    ),
   income_statement: IncomeStatementSchema,
   balance_sheet: BalanceSheetSchema,
   cash_flow: CashFlowSchema,
@@ -105,12 +110,11 @@ export const ExtractionSchema = z.object({
   currency_unit: z
     .string()
     .describe("The unit every figure is stated in, e.g. 'INR crore' or 'INR million'."),
-  basis: z
-    .enum(["consolidated", "standalone", "unknown"])
-    .describe("Which set of figures these are. Prefer consolidated when both appear."),
   periods: z
     .array(PeriodSchema)
-    .describe("One entry per reporting period found, including comparatives."),
+    .describe(
+      "One entry per period per reporting basis, including comparatives. FY2025 consolidated and FY2025 standalone are two separate entries.",
+    ),
   notes: z
     .string()
     .describe(
@@ -135,7 +139,8 @@ Rules:
 - If a line item is not disclosed, return null for it. Never guess, never infer, never derive one figure from others.
 - Many quarterly filings contain only a profit & loss statement. In that case return nulls for the whole balance sheet and cash flow — that is expected, not a failure.
 - If a statement is genuinely absent from the document, say so explicitly in "notes" and name which one. Do not leave the reviewer guessing whether you missed it or it was never there.
-- If both consolidated and standalone figures appear, extract the consolidated set and say so in "basis".
+- Extract both consolidated and standalone figures when the report presents both. They are different sets of numbers, not alternatives: return FY2025 consolidated and FY2025 standalone as two separate period entries, each tagged with its own "basis". Do not merge them, and do not pick one over the other.
+- Set "basis" to "unknown" only when the report genuinely does not say which it is.
 - State the unit once in "currency_unit" (for example "INR crore"). Every figure must be in that unit, except EPS which stays per-share.
 - Balance sheet figures are point-in-time; profit & loss and cash flow figures cover the period.
 - Use "notes" to flag anything a reviewer should check: restated prior-year figures, unusual items, statements absent from the document, figures you were unsure about, or sections you could not read.

@@ -27,21 +27,28 @@ export function SavedFinancials({ rows }: { rows: FinancialRow[] }) {
   const [view, setView] = useState<"annual" | "quarterly">(
     annual.length > 0 ? "annual" : "quarterly",
   );
+  const [basis, setBasis] = useState<FinancialRow["basis"]>("consolidated");
 
   if (rows.length === 0) return null;
 
-  const visible = view === "annual" ? annual : quarterly;
+  const forView = view === "annual" ? annual : quarterly;
+
+  // Consolidated and standalone are different sets of figures, so only one is
+  // shown at a time rather than mixed into the same table.
+  const bases = ["consolidated", "standalone", "unknown"].filter((candidate) =>
+    forView.some((row) => row.basis === candidate),
+  ) as FinancialRow["basis"][];
+
+  const activeBasis = bases.includes(basis) ? basis : (bases[0] ?? "unknown");
+  const visible = forView.filter((row) => row.basis === activeBasis);
   const ratiosByRow = visible.map((row) => computeRatios(row.data));
 
-  // Periods can carry different units or reporting bases. Comparing across
-  // those without saying so would silently mislead, so surface it instead of
-  // labelling the whole table with one row's unit.
+  // A unit mismatch within one basis is still worth flagging — a figure in
+  // lakh sitting beside one in crore looks like a hundredfold change.
   const units = [
     ...new Set(visible.map((row) => row.currency_unit).filter(Boolean)),
   ] as string[];
-  const bases = [...new Set(visible.map((row) => row.basis))];
   const mixedUnits = units.length > 1;
-  const mixedBases = bases.length > 1;
   const unit = units.length === 1 ? units[0] : null;
 
   return (
@@ -73,6 +80,25 @@ export function SavedFinancials({ rows }: { rows: FinancialRow[] }) {
               </button>
             ))}
           </div>
+
+          {bases.length > 1 && (
+            <div className="flex gap-1.5">
+              {bases.map((candidate) => (
+                <button
+                  key={candidate}
+                  type="button"
+                  onClick={() => setBasis(candidate)}
+                  className={`${toggleBase} capitalize ${
+                    activeBasis === candidate
+                      ? "border-accent bg-accent text-background"
+                      : "border-border hover:border-accent hover:text-accent"
+                  }`}
+                >
+                  {candidate}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <p className="text-sm text-muted">
@@ -80,30 +106,15 @@ export function SavedFinancials({ rows }: { rows: FinancialRow[] }) {
         </p>
       </div>
 
-      {(mixedUnits || mixedBases) && visible.length > 1 && (
+      {mixedUnits && visible.length > 1 && (
         <div className="mb-3 rounded-md border border-negative/40 bg-surface-sunken p-3 text-sm">
           <p className="font-medium text-negative">
             These columns aren&apos;t directly comparable
           </p>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted">
-            {mixedUnits && (
-              <li>
-                Different units: {units.join(" and ")}. A figure in lakh is 100×
-                smaller than the same figure in crore.
-              </li>
-            )}
-            {mixedBases && (
-              <li>
-                Different reporting bases: {bases.join(" and ")}. Standalone
-                covers the parent company only; consolidated includes
-                subsidiaries, so the two can differ by a lot. &ldquo;Unknown&rdquo;
-                means the report didn&apos;t make it clear.
-              </li>
-            )}
-          </ul>
           <p className="mt-1 text-muted">
-            Delete the period you don&apos;t want, or re-extract it so both are on
-            the same basis.
+            Different units: {units.join(" and ")}. A figure in lakh is 100×
+            smaller than the same figure in crore — re-extract the odd one out
+            and correct its unit before comparing.
           </p>
         </div>
       )}
@@ -122,12 +133,11 @@ export function SavedFinancials({ rows }: { rows: FinancialRow[] }) {
                   {visible.map((row) => (
                     <th key={row.id} className="stat-label px-4 py-3 text-right">
                       {row.period_label}
-                      <span className="block font-normal normal-case tracking-normal text-muted">
-                        {row.basis}
-                        {mixedUnits && row.currency_unit
-                          ? ` · ${row.currency_unit}`
-                          : ""}
-                      </span>
+                      {mixedUnits && row.currency_unit && (
+                        <span className="block font-normal normal-case tracking-normal text-muted">
+                          {row.currency_unit}
+                        </span>
+                      )}
                     </th>
                   ))}
                 </tr>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import React, { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   extractFinancials,
@@ -112,6 +112,18 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
     });
   }
 
+  function updateBasis(index: number, basis: string) {
+    setDraft((current) => {
+      if (!current) return current;
+      const periods = [...current.periods];
+      periods[index] = {
+        ...periods[index],
+        basis: basis as ExtractedPeriod["basis"],
+      };
+      return { ...current, periods };
+    });
+  }
+
   function removePeriod(index: number) {
     setDraft((current) =>
       current
@@ -128,7 +140,6 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
         stockId,
         documentId,
         currencyUnit: draft.currency_unit,
-        basis: draft.basis,
         periods: draft.periods,
       });
       if (result.error) setError(result.error);
@@ -215,28 +226,6 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
             />
           </label>
 
-          <label className="flex flex-col gap-1">
-            <span className="stat-label">Reporting basis</span>
-            <select
-              value={draft.basis}
-              onChange={(event) =>
-                setDraft((current) =>
-                  current
-                    ? {
-                        ...current,
-                        basis: event.target.value as Extraction["basis"],
-                      }
-                    : current,
-                )
-              }
-              className="w-44 rounded border border-border bg-surface px-2 py-1 text-sm outline-none focus:border-accent"
-            >
-              <option value="consolidated">Consolidated</option>
-              <option value="standalone">Standalone</option>
-              <option value="unknown">Unknown</option>
-            </select>
-          </label>
-
           <span className="pb-1 text-muted">
             Periods found{" "}
             <span className="figure text-foreground">{draft.periods.length}</span>
@@ -252,12 +241,11 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
           )}
         </div>
 
-        {draft.basis === "unknown" && (
+        {draft.periods.some((period) => period.basis === "unknown") && (
           <p className="mt-3 rounded-md border border-negative/40 bg-surface-sunken p-3 text-sm">
-            The report didn&apos;t make clear whether these are consolidated or
-            standalone figures. Set it above if you know — saving it as
-            &ldquo;unknown&rdquo; makes it hard to compare against other periods
-            later.
+            Some periods came back without a clear reporting basis. Set them
+            below if you know which they are — saving as &ldquo;unknown&rdquo;
+            makes them hard to compare later.
           </p>
         )}
 
@@ -306,15 +294,27 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
                   <th className="stat-label px-4 py-3">Line item</th>
                   {draft.periods.map((period, index) => (
                     <th key={index} className="stat-label px-4 py-3 text-right">
-                      {period.period_label}
-                      <button
-                        type="button"
-                        onClick={() => removePeriod(index)}
-                        className="ml-2 text-negative"
-                        title="Remove this period"
+                      <div className="flex items-center justify-end gap-1">
+                        {period.period_label}
+                        <button
+                          type="button"
+                          onClick={() => removePeriod(index)}
+                          className="text-negative"
+                          title="Remove this period"
+                        >
+                          ×
+                        </button>
+                      </div>
+
+                      <select
+                        value={period.basis}
+                        onChange={(event) => updateBasis(index, event.target.value)}
+                        className="mt-1 w-full rounded border border-border bg-surface px-1 py-0.5 text-xs font-normal normal-case tracking-normal outline-none focus:border-accent"
                       >
-                        ×
-                      </button>
+                        <option value="consolidated">Consolidated</option>
+                        <option value="standalone">Standalone</option>
+                        <option value="unknown">Unknown</option>
+                      </select>
                     </th>
                   ))}
                 </tr>
@@ -322,8 +322,8 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
 
               <tbody>
                 {SECTIONS.map((section) => (
-                  <>
-                    <tr key={section.key} className="bg-surface-sunken">
+                  <React.Fragment key={section.key}>
+                    <tr className="bg-surface-sunken">
                       <td
                         colSpan={draft.periods.length + 1}
                         className="stat-label px-4 py-2"
@@ -363,7 +363,7 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
                         ))}
                       </tr>
                     ))}
-                  </>
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

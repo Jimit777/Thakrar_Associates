@@ -113,7 +113,6 @@ export type SaveFinancialsInput = {
   stockId: string;
   documentId: string;
   currencyUnit: string;
-  basis: "consolidated" | "standalone" | "unknown";
   periods: ExtractedPeriod[];
 };
 
@@ -130,7 +129,7 @@ export async function saveFinancials(
   if (!user) return { error: "You are signed out. Refresh and sign in again." };
 
   const rows = input.periods.map((period) => {
-    const { period_label, period_type, ...figures } = period;
+    const { period_label, period_type, basis, ...figures } = period;
 
     return {
       user_id: user.id,
@@ -138,7 +137,9 @@ export async function saveFinancials(
       source_document_id: input.documentId,
       period_type,
       period_label,
-      basis: input.basis,
+      // Each period carries its own basis, so a report presenting both
+      // consolidated and standalone saves both rather than one winning.
+      basis,
       currency_unit: input.currencyUnit,
       data: figures,
     };
