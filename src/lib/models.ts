@@ -39,6 +39,14 @@ export const ANALYSIS_MODEL = "claude-opus-5";
 export const BRIEFING_MODEL = "claude-sonnet-5";
 
 /**
+ * Key points are a fact sheet, not an assessment: find what the company has
+ * disclosed and restate it. That is a retrieval job rather than a reasoning
+ * one, so it runs on the smallest model — a few rupees and a few seconds,
+ * against a few hundred rupees and a few minutes for the full briefing.
+ */
+export const KEY_POINTS_MODEL = "claude-haiku-4-5";
+
+/**
  * Decides whether a chat question needs web research. One word of output on the
  * cheapest model — a fraction of a paisa, and far more reliable than trying to
  * spot research questions by keyword.

@@ -1,9 +1,9 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeading, EmptyState } from "@/components/page-heading";
 import { DocumentUpload } from "@/components/document-upload";
 import { DocumentsTable } from "@/components/documents-table";
-import { PriceChart } from "@/components/price-chart";
 import { StockChat, type ChatMessage } from "@/components/stock-chat";
 import { StockTabs } from "@/components/stock-tabs";
 import { StockInsights } from "@/components/stock-insights";
@@ -11,17 +11,18 @@ import {
   ConcallSummaries,
   type ConcallEntry,
 } from "@/components/concall-summaries";
+import { KeyPointsPanel } from "@/components/key-points";
+import type { KeyPoints } from "@/lib/key-points-schema";
 import type { Insights } from "@/lib/insights-schema";
 import type { ConcallSummary } from "@/lib/concall-schema";
 import { SavedFinancials } from "@/components/saved-financials";
-import { ScorecardPanel } from "@/components/scorecard-panel";
-import { ValuationPanel } from "@/components/valuation-panel";
 import { SegmentMix } from "@/components/segment-mix";
-import { computeValuation } from "@/lib/valuation";
-import { buildScorecard } from "@/lib/scorecard";
+import {
+  PriceAndValuation,
+  PriceAndValuationSkeleton,
+} from "@/components/price-and-valuation";
 import { createClient } from "@/lib/supabase/server";
 import { deleteStock } from "../actions";
-import { getPriceHistory } from "../price";
 import { sortByPeriod } from "@/lib/periods";
 import { type StockDocument, type Stock } from "@/types/stock";
 import { normaliseFigures, type FinancialRow } from "@/types/financial";
@@ -67,9 +68,6 @@ export default async function StockPage({
     .eq("stock_id", stock.id)
     .order("period_label");
 
-  // Fetched here so the chart arrives with the page rather than after it.
-  const initialPrices = await getPriceHistory(stock.symbol, { range: "1y" });
-
   const { data: chatData } = await supabase
     .from("chat_messages")
     .select("role, content")
@@ -103,15 +101,22 @@ export default async function StockPage({
       };
     });
 
-  const { data: insightsRow } = await supabase
-    .from("stock_insights")
-    .select("content, generated_at, periods_used")
-    .eq("stock_id", stock.id)
-    .maybeSingle<{
-      content: unknown;
-      generated_at: string;
-      periods_used: number;
-    }>();
+  const [{ data: insightsRow }, { data: keyPointsRow }] = await Promise.all([
+    supabase
+      .from("stock_insights")
+      .select("content, generated_at, periods_used")
+      .eq("stock_id", stock.id)
+      .maybeSingle<{
+        content: unknown;
+        generated_at: string;
+        periods_used: number;
+      }>(),
+    supabase
+      .from("stock_key_points")
+      .select("content, generated_at")
+      .eq("stock_id", stock.id)
+      .maybeSingle<{ content: unknown; generated_at: string }>(),
+  ]);
 
   // Sorted by real chronology, not by label text — otherwise Q1 FY2026 lands
   // before Q2 FY2025.
@@ -122,12 +127,6 @@ export default async function StockPage({
     })),
   );
 
-  // Valuation joins the last traded price to the confirmed figures, and the
-  // scorecard leans on it for the one check the reports alone can't answer.
-  const points = initialPrices.ok ? initialPrices.history.points : [];
-  const lastPrice = points.at(-1)?.close ?? null;
-  const valuation = computeValuation(financials, lastPrice);
-  const scorecard = buildScorecard(financials, valuation);
 
   return (
     <>
@@ -165,15 +164,20 @@ export default async function StockPage({
             label: "Overview",
             panel: (
               <div className="space-y-8">
-                {scorecard && <ScorecardPanel scorecard={scorecard} />}
-
-                {valuation && <ValuationPanel valuation={valuation} />}
-
-                <PriceChart
+                {/* What the company is comes before how it is doing. */}
+                <KeyPointsPanel
+                  stockId={stock.id}
                   symbol={stock.symbol}
-                  initialHistory={initialPrices.ok ? initialPrices.history : null}
-                  initialError={initialPrices.ok ? null : initialPrices.error}
+                  keyPoints={(keyPointsRow?.content as KeyPoints | null) ?? null}
+                  generatedAt={keyPointsRow?.generated_at ?? null}
                 />
+
+                <Suspense fallback={<PriceAndValuationSkeleton />}>
+                  <PriceAndValuation
+                    symbol={stock.symbol}
+                    financials={financials}
+                  />
+                </Suspense>
 
                 <SegmentMix rows={financials} />
 

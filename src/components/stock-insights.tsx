@@ -86,11 +86,11 @@ export function StockInsights({
     <section>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-medium">Business briefing</h2>
+          <h2 className="text-base font-medium">Strengths and concerns</h2>
           <p className="mt-0.5 text-xs text-muted">
             {generatedAt
-              ? `Built from ${periodsUsed} confirmed period${periodsUsed === 1 ? "" : "s"} plus web research · ${formatWhen(generatedAt)}`
-              : "What this company does, and what the figures say about it."}
+              ? `Built from ${periodsUsed} confirmed period${periodsUsed === 1 ? "" : "s"} · ${formatWhen(generatedAt)}`
+              : "The deeper read: what the figures say, with the evidence behind each point."}
           </p>
         </div>
 
@@ -119,54 +119,16 @@ export function StockInsights({
 
       {!insights ? (
         <div className="rounded-lg border border-dashed border-border bg-surface px-6 py-10 text-center">
-          <p className="text-sm">No briefing yet for {symbol}.</p>
+          <p className="text-sm">No assessment yet for {symbol}.</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-muted">
-            Builds a plain-English overview of the business, then strengths and
-            concerns where every point shows the figures behind it and where they
-            came from.
+            Strengths and concerns where every point shows the figures behind it
+            and where they came from. Slower and dearer than the key points
+            above — this one reasons over the numbers rather than restating
+            them.
           </p>
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="rounded-lg border border-border bg-surface p-4 sm:p-5">
-            <p className="text-sm leading-relaxed">{insights.business.summary}</p>
-
-            <dl className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2">
-              <div>
-                <dt className="stat-label">Industry</dt>
-                <dd className="mt-0.5 text-sm">{insights.business.industry}</dd>
-              </div>
-              <div>
-                <dt className="stat-label">How it earns</dt>
-                <dd className="mt-0.5 text-sm">{insights.business.revenue_model}</dd>
-              </div>
-              <div>
-                <dt className="stat-label">Where it operates</dt>
-                <dd className="mt-0.5 text-sm">{insights.business.footprint}</dd>
-              </div>
-              <div>
-                <dt className="stat-label">Scale</dt>
-                <dd className="mt-0.5 text-sm">{insights.business.scale}</dd>
-              </div>
-            </dl>
-
-            {insights.business.products.length > 0 && (
-              <div className="mt-4">
-                <p className="stat-label">Products and segments</p>
-                <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                  {insights.business.products.map((product) => (
-                    <li
-                      key={product}
-                      className="rounded-full border border-border bg-surface-sunken px-2.5 py-1 text-xs"
-                    >
-                      {product}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-
           <div className="grid gap-4 lg:grid-cols-2">
             <div>
               <h3 className="stat-label mb-2">

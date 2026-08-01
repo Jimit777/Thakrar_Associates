@@ -79,7 +79,10 @@ export async function generateInsights(stockId: string): Promise<InsightsResult>
         format: zodOutputFormat(InsightsSchema),
       },
       system: INSIGHTS_PROMPT,
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 4 }],
+      // Halved once the business overview moved to the cheap key-points action:
+      // each search pulls page content into the input, and the assessment is
+      // mostly arithmetic on figures that are already here.
+      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 2 }],
       messages: [
         {
           role: "user",
