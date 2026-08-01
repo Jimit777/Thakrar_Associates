@@ -127,6 +127,27 @@ async function fetchChart(ticker: string, query: string) {
   return points.length > 0 ? points : null;
 }
 
+/**
+ * Closing prices for a ticker exactly as given, with no exchange suffix added.
+ *
+ * Indices are the reason this exists: the Nifty 50 is `^NSEI`, which is not a
+ * symbol on either exchange and must not have `.NS` appended to it.
+ */
+export async function fetchTickerHistory(
+  ticker: string,
+  range: PriceRangeId,
+): Promise<PriceHistory | null> {
+  const preset = PRICE_RANGES.find((entry) => entry.id === range);
+  const query = `range=${range}&interval=${intervalForSpan(preset?.days ?? 365)}`;
+
+  try {
+    const points = await fetchChart(ticker, query);
+    return points ? { ticker, points } : null;
+  } catch {
+    return null;
+  }
+}
+
 function spanOf(points: PricePoint[]) {
   if (points.length < 2) return 0;
   return (

@@ -12,7 +12,10 @@ import {
   type ConcallEntry,
 } from "@/components/concall-summaries";
 import { KeyPointsPanel } from "@/components/key-points";
+import { PromiseTracker } from "@/components/promise-tracker";
 import type { KeyPoints } from "@/lib/key-points-schema";
+import type { Peers } from "@/lib/peers-schema";
+import type { Promises } from "@/lib/promises-schema";
 import type { Insights } from "@/lib/insights-schema";
 import type { ConcallSummary } from "@/lib/concall-schema";
 import { SavedFinancials } from "@/components/saved-financials";
@@ -101,7 +104,12 @@ export default async function StockPage({
       };
     });
 
-  const [{ data: insightsRow }, { data: keyPointsRow }] = await Promise.all([
+  const [
+    { data: insightsRow },
+    { data: keyPointsRow },
+    { data: peersRow },
+    { data: promisesRow },
+  ] = await Promise.all([
     supabase
       .from("stock_insights")
       .select("content, generated_at, periods_used")
@@ -116,6 +124,20 @@ export default async function StockPage({
       .select("content, generated_at")
       .eq("stock_id", stock.id)
       .maybeSingle<{ content: unknown; generated_at: string }>(),
+    supabase
+      .from("stock_peers")
+      .select("content, generated_at")
+      .eq("stock_id", stock.id)
+      .maybeSingle<{ content: unknown; generated_at: string }>(),
+    supabase
+      .from("concall_promises")
+      .select("content, generated_at, calls_used")
+      .eq("stock_id", stock.id)
+      .maybeSingle<{
+        content: unknown;
+        generated_at: string;
+        calls_used: number;
+      }>(),
   ]);
 
   // Sorted by real chronology, not by label text — otherwise Q1 FY2026 lands
@@ -177,8 +199,11 @@ export default async function StockPage({
 
                 <Suspense fallback={<PriceAndValuationSkeleton />}>
                   <PriceAndValuation
+                    stockId={stock.id}
                     symbol={stock.symbol}
                     financials={financials}
+                    peers={(peersRow?.content as Peers | null) ?? null}
+                    peersGeneratedAt={peersRow?.generated_at ?? null}
                   />
                 </Suspense>
 
@@ -238,7 +263,18 @@ export default async function StockPage({
                   description="Upload a transcript under Documents with the type set to concall, then summarise it here."
                 />
               ) : (
-                <ConcallSummaries entries={concallEntries} />
+                <div className="space-y-8">
+                  <PromiseTracker
+                    stockId={stock.id}
+                    promises={(promisesRow?.content as Promises | null) ?? null}
+                    generatedAt={promisesRow?.generated_at ?? null}
+                    callsUsed={promisesRow?.calls_used ?? 0}
+                    currentCalls={
+                      concallEntries.filter((entry) => entry.summary).length
+                    }
+                  />
+                  <ConcallSummaries entries={concallEntries} />
+                </div>
               ),
           },
           {

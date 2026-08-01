@@ -1,10 +1,13 @@
 import { PriceChart } from "@/components/price-chart";
 import { ScorecardPanel } from "@/components/scorecard-panel";
 import { ValuationPanel } from "@/components/valuation-panel";
+import { PeerComparison } from "@/components/peer-comparison";
 import { Skeleton } from "@/components/skeleton";
 import { getPriceHistory } from "@/app/(app)/analyzer/price";
 import { buildScorecard } from "@/lib/scorecard";
 import { computeValuation } from "@/lib/valuation";
+import { selfComparisonRow } from "@/lib/comparison";
+import type { Peers } from "@/lib/peers-schema";
 import type { FinancialRow } from "@/types/financial";
 
 /**
@@ -16,11 +19,17 @@ import type { FinancialRow } from "@/types/financial";
  * blocked on a chart the reader may not even scroll to.
  */
 export async function PriceAndValuation({
+  stockId,
   symbol,
   financials,
+  peers,
+  peersGeneratedAt,
 }: {
+  stockId: string;
   symbol: string;
   financials: FinancialRow[];
+  peers: Peers | null;
+  peersGeneratedAt: string | null;
 }) {
   const prices = await getPriceHistory(symbol, { range: "1y" });
 
@@ -37,6 +46,16 @@ export async function PriceAndValuation({
         symbol={symbol}
         initialHistory={prices.ok ? prices.history : null}
         initialError={prices.ok ? null : prices.error}
+      />
+
+      {/* Peers belong here rather than on the page: the company's own column
+          needs the market cap and P/E worked out just above. */}
+      <PeerComparison
+        stockId={stockId}
+        symbol={symbol}
+        peers={peers}
+        self={selfComparisonRow(financials, valuation)}
+        generatedAt={peersGeneratedAt}
       />
     </div>
   );

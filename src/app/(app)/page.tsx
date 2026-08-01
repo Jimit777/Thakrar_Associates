@@ -1,6 +1,17 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { PageHeading, EmptyState } from "@/components/page-heading";
+import { SectorAllocation } from "@/components/sector-allocation";
+import {
+  PortfolioVsIndex,
+  PortfolioVsIndexSkeleton,
+} from "@/components/portfolio-vs-index";
 import { createClient } from "@/lib/supabase/server";
+import {
+  concentrationFlags,
+  moversByContribution,
+  sectorBreakdown,
+} from "@/lib/portfolio-analytics";
 import { formatCurrency, formatPercent } from "@/lib/format";
 
 type HoldingRow = {
@@ -61,7 +72,7 @@ export default async function DashboardPage() {
     supabase
       .from("holdings")
       .select("symbol, quantity, avg_price, last_price, last_refreshed_at"),
-    supabase.from("stocks").select("id, symbol"),
+    supabase.from("stocks").select("id, symbol, sector"),
     supabase
       .from("documents")
       .select("id, stock_id, period_label, created_at")
@@ -99,15 +110,34 @@ export default async function DashboardPage() {
     .sort()
     .at(-1);
 
-  // Best and worst performers, so the dashboard says something a total can't.
-  const movers = priced
-    .map((h) => ({
-      symbol: h.symbol,
-      percent: ((h.last_price! - h.avg_price) / h.avg_price) * 100,
-    }))
-    .sort((a, b) => b.percent - a.percent);
+  const valued = holdings.map((h) => ({
+    symbol: h.symbol,
+    quantity: h.quantity,
+    avgPrice: h.avg_price,
+    lastPrice: h.last_price,
+  }));
 
-  const stocks = (stocksData ?? []) as { id: string; symbol: string }[];
+  // Ranked by money, not by percentage: a 40% gain on a small position moves
+  // less than a 2% gain on a large one.
+  const movers = moversByContribution(valued);
+
+  const stocks = (stocksData ?? []) as {
+    id: string;
+    symbol: string;
+    sector: string | null;
+  }[];
+
+  const sectorBySymbol = new Map(
+    stocks
+      .filter((s) => s.sector)
+      .map((s) => [s.symbol, s.sector as string]),
+  );
+
+  const sectors = sectorBreakdown(valued, sectorBySymbol);
+  const flags = concentrationFlags(valued, sectors);
+  const unclassified = priced
+    .map((h) => h.symbol)
+    .filter((symbol) => !sectorBySymbol.has(symbol));
   const recentDocuments = (documentsData ?? []) as {
     id: string;
     stock_id: string;
@@ -171,9 +201,12 @@ export default async function DashboardPage() {
             />
           </section>
 
-          <div className="mt-6">
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
             <section className="rounded-lg border border-border bg-surface p-4 sm:p-5">
               <h2 className="text-base font-medium">Movers</h2>
+              <p className="mt-0.5 text-xs text-muted">
+                What each holding has made or lost you, in rupees
+              </p>
 
               {movers.length === 0 ? (
                 <p className="mt-3 text-sm text-muted">
@@ -199,19 +232,39 @@ export default async function DashboardPage() {
                           {mover.symbol}
                         </Link>
                         <span
-                          className={`figure ${
-                            mover.percent >= 0
+                          className={`figure text-right ${
+                            mover.amount >= 0
                               ? "text-positive"
                               : "text-negative"
                           }`}
                         >
-                          {formatPercent(mover.percent)}
+                          {formatCurrency(mover.amount)}
+                          <span className="ml-2 text-xs">
+                            {formatPercent(mover.percent)}
+                          </span>
                         </span>
                       </li>
                     ))}
                 </ul>
               )}
             </section>
+
+            <SectorAllocation
+              sectors={sectors}
+              flags={flags}
+              unclassified={unclassified}
+            />
+          </div>
+
+          <div className="mt-6">
+            <Suspense fallback={<PortfolioVsIndexSkeleton />}>
+              <PortfolioVsIndex
+                holdings={priced.map((h) => ({
+                  symbol: h.symbol,
+                  quantity: h.quantity,
+                }))}
+              />
+            </Suspense>
           </div>
         </>
       )}
