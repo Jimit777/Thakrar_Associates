@@ -103,7 +103,17 @@ export async function generateKeyPoints(
       // ceiling above is what keeps this short, which is the point anyway.
       output_config: { format: zodOutputFormat(KeyPointsSchema) },
       system: KEY_POINTS_PROMPT,
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 3 }],
+      tools: [
+        {
+          type: "web_search_20260209",
+          name: "web_search",
+          max_uses: 3,
+          // Haiku can't call tools programmatically, and the search tool asks
+          // for that by default. "direct" is the plain call-and-get-results
+          // path, which is all a fact sheet needs.
+          allowed_callers: ["direct"],
+        },
+      ],
       messages: [
         {
           role: "user",
