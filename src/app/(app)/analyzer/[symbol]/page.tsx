@@ -14,6 +14,11 @@ import {
 import type { Insights } from "@/lib/insights-schema";
 import type { ConcallSummary } from "@/lib/concall-schema";
 import { SavedFinancials } from "@/components/saved-financials";
+import { ScorecardPanel } from "@/components/scorecard-panel";
+import { ValuationPanel } from "@/components/valuation-panel";
+import { SegmentMix } from "@/components/segment-mix";
+import { computeValuation } from "@/lib/valuation";
+import { buildScorecard } from "@/lib/scorecard";
 import { createClient } from "@/lib/supabase/server";
 import { deleteStock } from "../actions";
 import { getPriceHistory } from "../price";
@@ -56,7 +61,9 @@ export default async function StockPage({
 
   const { data: financialsData } = await supabase
     .from("financials")
-    .select("id, period_type, period_label, basis, currency_unit, data")
+    .select(
+      "id, period_type, period_label, basis, currency_unit, source_document_id, data",
+    )
     .eq("stock_id", stock.id)
     .order("period_label");
 
@@ -115,6 +122,13 @@ export default async function StockPage({
     })),
   );
 
+  // Valuation joins the last traded price to the confirmed figures, and the
+  // scorecard leans on it for the one check the reports alone can't answer.
+  const points = initialPrices.ok ? initialPrices.history.points : [];
+  const lastPrice = points.at(-1)?.close ?? null;
+  const valuation = computeValuation(financials, lastPrice);
+  const scorecard = buildScorecard(financials, valuation);
+
   return (
     <>
       <PageHeading
@@ -151,11 +165,17 @@ export default async function StockPage({
             label: "Overview",
             panel: (
               <div className="space-y-8">
+                {scorecard && <ScorecardPanel scorecard={scorecard} />}
+
+                {valuation && <ValuationPanel valuation={valuation} />}
+
                 <PriceChart
                   symbol={stock.symbol}
                   initialHistory={initialPrices.ok ? initialPrices.history : null}
                   initialError={initialPrices.ok ? null : initialPrices.error}
                 />
+
+                <SegmentMix rows={financials} />
 
                 <StockInsights
                   stockId={stock.id}

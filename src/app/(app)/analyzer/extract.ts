@@ -114,6 +114,8 @@ export type SaveFinancialsInput = {
   documentId: string;
   currencyUnit: string;
   periods: ExtractedPeriod[];
+  /** Pages of the source PDF that were read, so a figure can be traced back. */
+  sourcePages: number[];
 };
 
 /** Saves the figures the user has reviewed and confirmed. */
@@ -141,7 +143,9 @@ export async function saveFinancials(
       // consolidated and standalone saves both rather than one winning.
       basis,
       currency_unit: input.currencyUnit,
-      data: figures,
+      // Stored with the figures so the stock page can offer "open the page this
+      // came from" without a second lookup.
+      data: { ...figures, source_pages: input.sourcePages },
     };
   });
 

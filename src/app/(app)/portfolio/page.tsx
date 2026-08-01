@@ -4,7 +4,17 @@ import { HoldingsTable } from "@/components/holdings-table";
 import { RefreshPricesButton } from "@/components/refresh-prices-button";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency, formatPercent } from "@/lib/format";
-import { currentValue, investedValue, type Holding } from "@/types/holding";
+import {
+  currentValue,
+  investedValue,
+  portfolioXirr,
+  type Holding,
+} from "@/types/holding";
+
+/** Kept out of the component body so rendering stays a pure function. */
+function currentTime() {
+  return new Date();
+}
 
 export default async function PortfolioPage() {
   const supabase = await createClient();
@@ -12,7 +22,7 @@ export default async function PortfolioPage() {
   const { data, error } = await supabase
     .from("holdings")
     .select(
-      "id, symbol, exchange, quantity, avg_price, buy_date, last_price, last_refreshed_at",
+      "id, symbol, exchange, quantity, avg_price, buy_date, thesis, last_price, last_refreshed_at",
     )
     .order("symbol");
 
@@ -43,6 +53,10 @@ export default async function PortfolioPage() {
   const totalPnl = totalCurrent - pricedInvested;
   const totalPnlPercent =
     pricedInvested === 0 ? 0 : (totalPnl / pricedInvested) * 100;
+
+  // Annualised return, which a total percentage can't give you: 40% over ten
+  // months and 40% over eight years are not the same result.
+  const annualised = portfolioXirr(holdings, currentTime());
 
   const lastRefreshedAt =
     holdings
@@ -108,10 +122,42 @@ export default async function PortfolioPage() {
                         {formatPercent(totalPnlPercent)})
                       </span>
                     </span>
+                    {annualised && (
+                      <span
+                        title={`Across the ${annualised.covered} holding${annualised.covered === 1 ? "" : "s"} that have a buy date and a price.`}
+                      >
+                        Annualised{" "}
+                        <span
+                          className={`figure ${
+                            annualised.rate >= 0
+                              ? "text-positive"
+                              : "text-negative"
+                          }`}
+                        >
+                          {formatPercent(annualised.rate)}
+                        </span>
+                      </span>
+                    )}
                   </>
                 )}
               </div>
             </div>
+
+            {annualised && annualised.covered < holdings.length && (
+              <p className="mb-3 text-xs text-muted">
+                Annualised return covers {annualised.covered} of{" "}
+                {holdings.length} holdings — the rest have no buy date. Add one
+                by editing the holding.
+              </p>
+            )}
+
+            {!annualised && priced.length > 0 && (
+              <p className="mb-3 text-xs text-muted">
+                Add a buy date to your holdings to see an annualised return,
+                which is what makes gains comparable across positions bought at
+                different times.
+              </p>
+            )}
 
             {priced.length > 0 && priced.length < holdings.length && (
               <p className="mb-3 text-xs text-muted">
@@ -120,7 +166,10 @@ export default async function PortfolioPage() {
               </p>
             )}
 
-            <HoldingsTable holdings={holdings} />
+            <HoldingsTable
+              holdings={holdings}
+              nowIso={currentTime().toISOString()}
+            />
           </>
         )}
       </div>

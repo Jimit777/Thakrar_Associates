@@ -19,6 +19,7 @@ type ParsedHolding = {
   quantity: number;
   avg_price: number;
   buy_date: string | null;
+  thesis: string | null;
 };
 
 /**
@@ -34,6 +35,7 @@ function parseHolding(formData: FormData): ParsedHolding | string {
   const quantity = Number(formData.get("quantity"));
   const avgPrice = Number(formData.get("avg_price"));
   const buyDate = String(formData.get("buy_date") ?? "").trim();
+  const thesis = String(formData.get("thesis") ?? "").trim();
 
   if (!symbol) return "Enter a stock symbol.";
   if (!/^[A-Z0-9&.-]{1,20}$/.test(symbol)) {
@@ -46,6 +48,9 @@ function parseHolding(formData: FormData): ParsedHolding | string {
   if (!Number.isFinite(avgPrice) || avgPrice < 0) {
     return "Average price must be zero or more.";
   }
+  if (thesis.length > 2000) {
+    return "Keep the reason under 2000 characters.";
+  }
 
   return {
     symbol,
@@ -53,6 +58,7 @@ function parseHolding(formData: FormData): ParsedHolding | string {
     quantity,
     avg_price: avgPrice,
     buy_date: buyDate || null,
+    thesis: thesis || null,
   };
 }
 

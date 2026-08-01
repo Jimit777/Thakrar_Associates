@@ -112,6 +112,24 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
     });
   }
 
+  /**
+   * Share count is the figure most often read in the wrong scale — "6.5 crore
+   * shares" coming back as 6.5 — so it is editable here rather than only
+   * flagged later on the stock page.
+   */
+  function updateShares(index: number, raw: string) {
+    setDraft((current) => {
+      if (!current) return current;
+      const periods = [...current.periods];
+      const trimmed = raw.trim();
+      periods[index] = {
+        ...periods[index],
+        shares_outstanding: trimmed === "" ? null : Number(trimmed),
+      };
+      return { ...current, periods };
+    });
+  }
+
   function updateBasis(index: number, basis: string) {
     setDraft((current) => {
       if (!current) return current;
@@ -141,6 +159,7 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
         documentId,
         currencyUnit: draft.currency_unit,
         periods: draft.periods,
+        sourcePages: pageInfo?.selectedPages ?? [],
       });
       if (result.error) setError(result.error);
       else {
@@ -365,8 +384,87 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
                     ))}
                   </React.Fragment>
                 ))}
+
+                <tr className="bg-surface-sunken">
+                  <td
+                    colSpan={draft.periods.length + 1}
+                    className="stat-label px-4 py-2"
+                  >
+                    Shares
+                  </td>
+                </tr>
+
+                <tr className="border-b border-border last:border-0">
+                  <td className="px-4 py-2 text-sm">
+                    Equity shares outstanding
+                    <span className="mt-0.5 block text-xs text-muted">
+                      A count of shares, not in {draft.currency_unit || "the unit above"}
+                    </span>
+                  </td>
+                  {draft.periods.map((period, index) => (
+                    <td key={index} className="px-4 py-2 text-right">
+                      <input
+                        type="number"
+                        step="any"
+                        value={period.shares_outstanding ?? ""}
+                        placeholder="—"
+                        onChange={(event) =>
+                          updateShares(index, event.target.value)
+                        }
+                        className={`${inputClass} figure`}
+                      />
+                    </td>
+                  ))}
+                </tr>
               </tbody>
             </table>
+          </div>
+        )}
+
+        {draft.periods.some((period) => period.segments.length > 0) && (
+          <div className="mt-6">
+            <h3 className="text-sm font-medium">Segments found</h3>
+            <p className="mt-0.5 text-xs text-muted">
+              Saved as read. If a segment looks wrong, re-extract rather than
+              editing — the names have to match across years to chart properly.
+            </p>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {draft.periods
+                .filter((period) => period.segments.length > 0)
+                .map((period, index) => (
+                  <div
+                    key={index}
+                    className="rounded-md border border-border bg-surface p-3"
+                  >
+                    <p className="stat-label">
+                      {period.period_label} · {period.basis}
+                    </p>
+                    <ul className="mt-2 space-y-1">
+                      {period.segments.map((segment, position) => (
+                        <li
+                          key={`${segment.name}-${position}`}
+                          className="flex items-baseline justify-between gap-3 text-sm"
+                        >
+                          <span>
+                            {segment.name}
+                            <span className="ml-1.5 text-xs text-muted">
+                              {segment.kind}
+                            </span>
+                          </span>
+                          <span className="figure text-muted">
+                            {segment.revenue === null
+                              ? "—"
+                              : new Intl.NumberFormat("en-IN", {
+                                  maximumFractionDigits: 2,
+                                }).format(segment.revenue)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+            </div>
           </div>
         )}
 

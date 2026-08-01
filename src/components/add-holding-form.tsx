@@ -72,10 +72,23 @@ export function AddHoldingForm() {
         </label>
 
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="stat-label">Buy date (optional)</span>
+          <span className="stat-label">Buy date</span>
           <input name="buy_date" type="date" className={`${fieldClass} figure`} />
+          <span className="text-xs text-muted">Needed for annualised return</span>
         </label>
       </div>
+
+      {/* The reason for a purchase is the only part of a holding you cannot
+          reconstruct later from the numbers. */}
+      <label className="mt-4 flex flex-col gap-1.5 text-sm">
+        <span className="stat-label">Why you&apos;re buying it (optional)</span>
+        <textarea
+          name="thesis"
+          rows={2}
+          placeholder="What you expect to happen, and roughly by when. Six months from now this is what you'll check the position against."
+          className={`${fieldClass} resize-y`}
+        />
+      </label>
 
       {state.error && (
         <p className="mt-4 text-sm text-negative">{state.error}</p>

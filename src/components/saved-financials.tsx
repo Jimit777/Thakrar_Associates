@@ -146,6 +146,19 @@ export function SavedFinancials({ rows }: { rows: FinancialRow[] }) {
                           {row.currency_unit}
                         </span>
                       )}
+                      {row.source_document_id && (
+                        // Opens the report these figures were read from, at the
+                        // page they were read from.
+                        <a
+                          href={`/api/source/${row.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block font-normal normal-case tracking-normal text-accent underline underline-offset-2"
+                          title="Open the source report at the page these figures came from"
+                        >
+                          source
+                        </a>
+                      )}
                     </th>
                   ))}
                 </tr>

@@ -39,6 +39,12 @@ const STRONG_MARKERS = [
   "cash flow statement",
   "statement of changes in equity",
   "financial results",
+  // Segment disclosure and the share capital note sit in the notes to accounts,
+  // a long way from the statements, but both are extracted.
+  "segment information",
+  "segment reporting",
+  "operating segments",
+  "equity share capital",
 ];
 
 /** Line items that appear inside the statements themselves. */
@@ -55,6 +61,12 @@ const SUPPORTING_MARKERS = [
   "borrowings",
   "reserves and surplus",
   "other equity",
+  "segment revenue",
+  "segment results",
+  "reportable segment",
+  "geographical segment",
+  "equity shares of",
+  "weighted average number",
 ];
 
 export type PageSelection = {

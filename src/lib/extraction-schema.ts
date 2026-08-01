@@ -91,6 +91,24 @@ const CashFlowSchema = z.object({
   net_cash_flow: money,
 });
 
+/**
+ * Segment disclosure is where an annual report says what the business is
+ * actually made of. It sits in the notes rather than in the statements, so it
+ * is captured separately from the three sections above.
+ */
+const SegmentSchema = z.object({
+  name: z.string().describe("The segment's name, exactly as the report calls it."),
+  kind: z
+    .enum(["business", "geography"])
+    .describe(
+      "'business' for product or service segments, 'geography' for regions or countries.",
+    ),
+  revenue: money.describe("Segment revenue, in the same unit as everything else."),
+  profit: money.describe(
+    "Segment result — profit before unallocated items, interest and tax, if the report discloses it per segment.",
+  ),
+});
+
 export const PeriodSchema = z.object({
   period_label: z
     .string()
@@ -104,6 +122,17 @@ export const PeriodSchema = z.object({
   income_statement: IncomeStatementSchema,
   balance_sheet: BalanceSheetSchema,
   cash_flow: CashFlowSchema,
+  shares_outstanding: z
+    .number()
+    .nullable()
+    .describe(
+      "Number of equity shares outstanding at the end of the period, as a plain count of shares. NOT in the currency unit above, and NOT in crore, lakh or million. A report saying '65,00,00,000 equity shares' returns 650000000; one saying '6.50 crore shares' returns 65000000. Found in the share capital note or the earnings-per-share note. Null if not stated.",
+    ),
+  segments: z
+    .array(SegmentSchema)
+    .describe(
+      "Segment-wise revenue and results for this period, from the segment reporting note. Empty array if the report does not disclose segments, or says it operates in a single segment.",
+    ),
 });
 
 export const ExtractionSchema = z.object({
@@ -134,6 +163,10 @@ Finding the statements:
 - Indian reports head these sections in varying ways: "Balance Sheet", "Consolidated Balance Sheet", "Statement of Assets and Liabilities", "Statement of Cash Flows", "Cash Flow Statement". Treat all of them as the statement they are.
 - Match statements to periods by their date. A balance sheet headed "as at 31 March 2024" belongs to FY2024. A cash flow statement "for the year ended 31 March 2024" belongs to FY2024. Put all three statements for the same year into the same period entry — do not create separate entries for them.
 
+Two figures live in the notes rather than the statements:
+- Shares outstanding. Look in the equity share capital note ("65,00,00,000 equity shares of Rs 2 each fully paid up") or the earnings-per-share note. Return a plain count of shares — 650000000, not 65 and not 6.5. If the report only gives a weighted average number of shares, use that and say so in "notes". Null if neither appears.
+- Segments. Look for "Segment Information", "Operating Segments" or "Segment Reporting", usually a note near the end. Report each segment's revenue and, where disclosed, its segment result. Tag product or service segments as "business" and regions or countries as "geography" — a report often discloses both, and both should be returned. Return an empty array when the company states it operates in a single segment, and say that in "notes".
+
 Rules:
 - Report figures exactly as printed. Do not convert units, and do not calculate values that are not stated.
 - If a line item is not disclosed, return null for it. Never guess, never infer, never derive one figure from others.
@@ -141,7 +174,8 @@ Rules:
 - If a statement is genuinely absent from the document, say so explicitly in "notes" and name which one. Do not leave the reviewer guessing whether you missed it or it was never there.
 - Extract both consolidated and standalone figures when the report presents both. They are different sets of numbers, not alternatives: return FY2025 consolidated and FY2025 standalone as two separate period entries, each tagged with its own "basis". Do not merge them, and do not pick one over the other.
 - Set "basis" to "unknown" only when the report genuinely does not say which it is.
-- State the unit once in "currency_unit" (for example "INR crore"). Every figure must be in that unit, except EPS which stays per-share.
+- State the unit once in "currency_unit" (for example "INR crore"). Every figure must be in that unit, except EPS which stays per-share and shares outstanding which is a plain count.
+- Segment revenue is in the currency unit like everything else. Do not make the segments add up to total revenue — report what is printed, unallocated items and all.
 - Balance sheet figures are point-in-time; profit & loss and cash flow figures cover the period.
 - Use "notes" to flag anything a reviewer should check: restated prior-year figures, unusual items, statements absent from the document, figures you were unsure about, or sections you could not read.
 

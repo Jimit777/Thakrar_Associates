@@ -149,6 +149,29 @@ export function buildStockContext(input: {
       }).filter(Boolean);
 
       if (shown.length > 0) lines.push(`Ratios — ${shown.join("; ")}`);
+
+      if (row.data.shares_outstanding) {
+        lines.push(
+          `Equity shares outstanding: ${row.data.shares_outstanding} (a count of shares, not in ${unit})`,
+        );
+      }
+
+      // Segment detail is what turns one revenue figure into the several
+      // businesses behind it — worth the handful of tokens it costs.
+      const segments = row.data.segments ?? [];
+      if (segments.length > 0) {
+        lines.push(
+          `Segments — ${segments
+            .map(
+              (segment) =>
+                `${segment.name} (${segment.kind}): revenue ${segment.revenue ?? "not disclosed"}` +
+                (segment.profit === null || segment.profit === undefined
+                  ? ""
+                  : `, result ${segment.profit}`),
+            )
+            .join("; ")}`,
+        );
+      }
     }
   }
 

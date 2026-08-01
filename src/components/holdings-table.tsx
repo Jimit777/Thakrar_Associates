@@ -7,7 +7,9 @@ import {
   type HoldingFormState,
 } from "@/app/(app)/portfolio/actions";
 import { formatCurrency, formatQuantity, formatPercent } from "@/lib/format";
+import { formatHoldingPeriod } from "@/lib/xirr";
 import {
+  annualisedReturn,
   currentValue,
   investedValue,
   profitAndLoss,
@@ -28,8 +30,16 @@ function pnlColour(amount: number) {
  * Eight columns of figures will not fit on a phone, so below `md` the same
  * holdings are drawn as stacked cards instead of a table that scrolls sideways.
  */
-export function HoldingsTable({ holdings }: { holdings: Holding[] }) {
+export function HoldingsTable({
+  holdings,
+  nowIso,
+}: {
+  holdings: Holding[];
+  /** Passed in from the server so both renders agree on "today". */
+  nowIso: string;
+}) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const now = new Date(nowIso);
 
   return (
     <>
@@ -45,6 +55,7 @@ export function HoldingsTable({ holdings }: { holdings: Holding[] }) {
             <DisplayCard
               key={holding.id}
               holding={holding}
+              now={now}
               onEdit={() => setEditingId(holding.id)}
             />
           ),
@@ -78,6 +89,7 @@ export function HoldingsTable({ holdings }: { holdings: Holding[] }) {
                 <DisplayRow
                   key={holding.id}
                   holding={holding}
+                  now={now}
                   onEdit={() => setEditingId(holding.id)}
                 />
               ),
@@ -112,13 +124,16 @@ function DeleteButton({ holding }: { holding: Holding }) {
 
 function DisplayCard({
   holding,
+  now,
   onEdit,
 }: {
   holding: Holding;
+  now: Date;
   onEdit: () => void;
 }) {
   const value = currentValue(holding);
   const pnl = profitAndLoss(holding);
+  const annualised = annualisedReturn(holding, now);
 
   return (
     <div className="rounded-lg border border-border bg-surface p-4">
@@ -134,9 +149,20 @@ function DisplayCard({
           <div className={`text-right ${pnlColour(pnl.amount)}`}>
             <p className="figure text-lg">{formatCurrency(pnl.amount)}</p>
             <p className="figure text-xs">{formatPercent(pnl.percent)}</p>
+            {annualised && (
+              <p className="figure text-xs">
+                {formatPercent(annualised.rate)} a year
+              </p>
+            )}
           </div>
         )}
       </div>
+
+      {annualised && (
+        <p className="mt-1 text-xs text-muted">
+          Held {formatHoldingPeriod(annualised.days)}
+        </p>
+      )}
 
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
         {(
@@ -158,6 +184,12 @@ function DisplayCard({
           </div>
         ))}
       </dl>
+
+      {holding.thesis && (
+        <p className="mt-3 border-l-2 border-border pl-3 text-sm leading-relaxed text-muted">
+          {holding.thesis}
+        </p>
+      )}
 
       <div className="mt-4 flex gap-2">
         <button
@@ -251,6 +283,17 @@ function EditCard({
             className={`${editFieldClass} figure`}
           />
         </label>
+
+        <label className="col-span-2 flex flex-col gap-1 text-sm">
+          <span className="stat-label">Why you bought it</span>
+          <textarea
+            name="thesis"
+            rows={3}
+            defaultValue={holding.thesis ?? ""}
+            placeholder="What you expected when you bought — the thing to check against later."
+            className={`${editFieldClass} resize-y`}
+          />
+        </label>
       </div>
 
       {state.error && <p className="mt-3 text-xs text-negative">{state.error}</p>}
@@ -279,19 +322,36 @@ function EditCard({
 
 function DisplayRow({
   holding,
+  now,
   onEdit,
 }: {
   holding: Holding;
+  now: Date;
   onEdit: () => void;
 }) {
   const value = currentValue(holding);
   const pnl = profitAndLoss(holding);
+  const annualised = annualisedReturn(holding, now);
 
   return (
     <tr className="border-b border-border last:border-0">
-      <td className={cellClass}>
+      <td className={`${cellClass} max-w-xs`}>
         <span className="font-medium">{holding.symbol}</span>
         <span className="ml-2 text-xs text-muted">{holding.exchange}</span>
+        {annualised && (
+          <span className="block text-xs text-muted">
+            Held {formatHoldingPeriod(annualised.days)}
+          </span>
+        )}
+        {holding.thesis && (
+          // Clamped so one long thesis can't stretch every row.
+          <span
+            className="mt-1 line-clamp-2 block text-xs leading-relaxed text-muted"
+            title={holding.thesis}
+          >
+            {holding.thesis}
+          </span>
+        )}
       </td>
       <td className={`${cellClass} figure text-right`}>
         {formatQuantity(holding.quantity)}
@@ -327,6 +387,11 @@ function DisplayRow({
           <>
             <div>{formatCurrency(pnl.amount)}</div>
             <div className="text-xs">{formatPercent(pnl.percent)}</div>
+            {annualised && (
+              <div className="text-xs" title="Annualised — the rate this has compounded at">
+                {formatPercent(annualised.rate)} p.a.
+              </div>
+            )}
           </>
         )}
       </td>
@@ -385,6 +450,14 @@ function EditRow({
           <option value="NSE">NSE</option>
           <option value="BSE">BSE</option>
         </select>
+        <textarea
+          name="thesis"
+          form={formId}
+          rows={2}
+          defaultValue={holding.thesis ?? ""}
+          placeholder="Why you bought it"
+          className={`${editFieldClass} mt-1 resize-y`}
+        />
       </td>
 
       <td className={cellClass}>
