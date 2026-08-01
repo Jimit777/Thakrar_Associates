@@ -99,11 +99,9 @@ export async function generateKeyPoints(
       // A fact sheet is short. The ceiling covers internal reasoning too, so it
       // is the main brake on both cost and how long the user waits.
       max_tokens: 4000,
-      output_config: {
-        // Not "low": low effort suppresses tool use, and this needs to search.
-        effort: "medium",
-        format: zodOutputFormat(KeyPointsSchema),
-      },
+      // No effort setting: Haiku rejects the parameter outright. The output
+      // ceiling above is what keeps this short, which is the point anyway.
+      output_config: { format: zodOutputFormat(KeyPointsSchema) },
       system: KEY_POINTS_PROMPT,
       tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 3 }],
       messages: [
