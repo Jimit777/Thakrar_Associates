@@ -27,8 +27,23 @@ export type ExtractionModelId = (typeof EXTRACTION_MODELS)[number]["id"];
 
 export const DEFAULT_EXTRACTION_MODEL: ExtractionModelId = "claude-sonnet-5";
 
-/** Model used for analysis and the per-stock chat. */
+/** Model used for the per-stock chat. */
 export const ANALYSIS_MODEL = "claude-opus-5";
+
+/**
+ * The briefing runs on Sonnet rather than Opus. It is a summarising job over
+ * figures that are already extracted, which Sonnet handles well — and it is the
+ * single most expensive action in the app, so the cheaper, faster model matters
+ * more here than anywhere else.
+ */
+export const BRIEFING_MODEL = "claude-sonnet-5";
+
+/**
+ * Decides whether a chat question needs web research. One word of output on the
+ * cheapest model — a fraction of a paisa, and far more reliable than trying to
+ * spot research questions by keyword.
+ */
+export const CLASSIFIER_MODEL = "claude-haiku-4-5";
 
 /** Never trust a model name sent from the browser. */
 export function resolveExtractionModel(value: unknown): ExtractionModelId {

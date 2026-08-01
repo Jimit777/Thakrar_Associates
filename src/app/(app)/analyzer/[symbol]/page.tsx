@@ -4,6 +4,9 @@ import { PageHeading, EmptyState } from "@/components/page-heading";
 import { DocumentUpload } from "@/components/document-upload";
 import { ExtractionReview } from "@/components/extraction-review";
 import { PriceChart } from "@/components/price-chart";
+import { StockChat, type ChatMessage } from "@/components/stock-chat";
+import { StockInsights } from "@/components/stock-insights";
+import type { Insights } from "@/lib/insights-schema";
 import { SavedFinancials } from "@/components/saved-financials";
 import { createClient } from "@/lib/supabase/server";
 import { deleteDocument, deleteStock } from "../actions";
@@ -71,6 +74,24 @@ export default async function StockPage({
   // Fetched here so the chart arrives with the page rather than after it.
   const initialPrices = await getPriceHistory(stock.symbol, { range: "1y" });
 
+  const { data: chatData } = await supabase
+    .from("chat_messages")
+    .select("role, content")
+    .eq("stock_id", stock.id)
+    .order("created_at");
+
+  const chatMessages = (chatData ?? []) as ChatMessage[];
+
+  const { data: insightsRow } = await supabase
+    .from("stock_insights")
+    .select("content, generated_at, periods_used")
+    .eq("stock_id", stock.id)
+    .maybeSingle<{
+      content: unknown;
+      generated_at: string;
+      periods_used: number;
+    }>();
+
   // Sorted by real chronology, not by label text — otherwise Q1 FY2026 lands
   // before Q2 FY2025.
   const financials: FinancialRow[] = sortByPeriod(
@@ -113,6 +134,15 @@ export default async function StockPage({
         symbol={stock.symbol}
         initialHistory={initialPrices.ok ? initialPrices.history : null}
         initialError={initialPrices.ok ? null : initialPrices.error}
+      />
+
+      <StockInsights
+        stockId={stock.id}
+        symbol={stock.symbol}
+        insights={(insightsRow?.content as Insights | undefined) ?? null}
+        generatedAt={insightsRow?.generated_at ?? null}
+        periodsUsed={insightsRow?.periods_used ?? 0}
+        currentPeriods={financials.length}
       />
 
       <div className="mt-8">
@@ -184,6 +214,13 @@ export default async function StockPage({
       </div>
 
       <SavedFinancials rows={financials} />
+
+      <StockChat
+        stockId={stock.id}
+        symbol={stock.symbol}
+        initialMessages={chatMessages}
+        hasFinancials={financials.length > 0}
+      />
     </>
   );
 }
