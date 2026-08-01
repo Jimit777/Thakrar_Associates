@@ -20,6 +20,12 @@ export type Check = {
   verdict: Verdict;
   /** The measured figure, already formatted. */
   value: string;
+  /**
+   * What the figure actually is, in a few words — "operating cash ÷ net
+   * profit". A heading alone can't carry both the plain-English name and the
+   * calculation, and the reader needs both.
+   */
+  measure: string;
   /** Which periods and which figures it came from. */
   basis: string;
   /** The bands the figure was judged against. */
@@ -102,9 +108,10 @@ export function buildScorecard(
 
   checks.push({
     key: "growth",
-    label: "Growth",
+    label: "Sales growth",
     verdict: band(cagr, 5, 12),
     value: pct(cagr),
+    measure: "a year, compounded",
     basis:
       cagr === null
         ? "Needs revenue in two annual periods at least a year apart."
@@ -117,9 +124,10 @@ export function buildScorecard(
   const roce = latestRatios.roce;
   checks.push({
     key: "profitability",
-    label: "Profitability",
+    label: "Return on capital",
     verdict: band(roce, 10, 15),
     value: pct(roce),
+    measure: "operating profit ÷ capital used",
     basis:
       roce === null
         ? "Needs operating profit plus equity and borrowings from the balance sheet."
@@ -132,9 +140,10 @@ export function buildScorecard(
   const coverage = latestRatios.interest_coverage;
   checks.push({
     key: "balance_sheet",
-    label: "Balance sheet",
+    label: "Debt vs equity",
     verdict: inverseBand(debtToEquity, 0.5, 1),
     value: times(debtToEquity),
+    measure: "borrowings ÷ shareholders' funds",
     basis:
       debtToEquity === null
         ? "Needs borrowings, equity capital and reserves from the balance sheet."
@@ -164,9 +173,10 @@ export function buildScorecard(
 
   checks.push({
     key: "cash",
-    label: "Cash conversion",
+    label: "Profit into cash",
     verdict: band(conversion, 0.5, 0.8),
     value: conversion === null ? "—" : `${conversion.toFixed(2)}×`,
+    measure: "operating cash ÷ net profit",
     basis:
       conversion === null
         ? "Needs a cash flow statement alongside net profit — quarterly filings rarely carry one."
@@ -179,9 +189,10 @@ export function buildScorecard(
   const pe = valuation?.peRatio ?? null;
   checks.push({
     key: "valuation",
-    label: "Price",
+    label: "Price vs profit",
     verdict: inverseBand(pe, 20, 40),
     value: pe === null ? "—" : `${pe.toFixed(1)}×`,
+    measure: "P/E — share price ÷ earnings per share",
     basis:
       pe === null
         ? "Needs a share price and the EPS printed in the annual report."

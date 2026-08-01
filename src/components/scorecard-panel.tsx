@@ -45,6 +45,10 @@ export function ScorecardPanel({ scorecard }: { scorecard: Scorecard }) {
             >
               <p className="stat-label">{check.label}</p>
               <p className={`figure mt-1 text-lg ${style.text}`}>{check.value}</p>
+              {/* The figure alone is ambiguous — 0.82× of what? */}
+              <p className="mt-0.5 text-[11px] leading-snug text-muted">
+                {check.measure}
+              </p>
               <div
                 className={`mt-2 h-1 rounded-full ${style.bar}`}
                 aria-hidden
@@ -69,6 +73,9 @@ export function ScorecardPanel({ scorecard }: { scorecard: Scorecard }) {
                   className={`ml-2 font-normal ${VERDICT_STYLES[check.verdict].text}`}
                 >
                   {check.value}
+                </span>
+                <span className="ml-2 font-normal text-muted">
+                  {check.measure}
                 </span>
               </dt>
               <dd className="mt-0.5 text-sm text-muted">{check.basis}</dd>
