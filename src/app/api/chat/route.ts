@@ -5,6 +5,7 @@ import { ANALYSIS_MODEL, BRIEFING_MODEL, CLASSIFIER_MODEL } from "@/lib/models";
 import { fetchPriceSummary } from "@/lib/prices";
 import { sortByPeriod } from "@/lib/periods";
 import { normaliseFigures, type FinancialRow } from "@/types/financial";
+import type { ConcallSummary } from "@/lib/concall-schema";
 
 export const maxDuration = 120;
 
@@ -128,7 +129,12 @@ export async function POST(request: Request) {
   // All three run together. The price lookup used to run after the database
   // queries, adding its round trip to every single message before Claude was
   // even called.
-  const [{ data: financialsData }, { data: historyData }, priceSummary] =
+  const [
+    { data: financialsData },
+    { data: historyData },
+    priceSummary,
+    { data: concallData },
+  ] =
     await Promise.all([
       supabase
         .from("financials")
@@ -141,6 +147,10 @@ export async function POST(request: Request) {
         .order("created_at", { ascending: false })
         .limit(HISTORY_LIMIT),
       fetchPriceSummary(stock.symbol).catch(() => null),
+      supabase
+        .from("concall_summaries")
+        .select("period_label, content")
+        .eq("stock_id", stock.id),
     ]);
 
   const rows: FinancialRow[] = sortByPeriod(
@@ -157,6 +167,10 @@ export async function POST(request: Request) {
     sector: stock.sector,
     rows,
     price: priceSummary,
+    concalls: (concallData ?? []).map((row) => ({
+      period: row.period_label as string,
+      summary: row.content as ConcallSummary,
+    })),
   });
 
   const priorMessages = (historyData ?? [])

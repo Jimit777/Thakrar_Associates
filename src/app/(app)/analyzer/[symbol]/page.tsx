@@ -6,7 +6,12 @@ import { ExtractionReview } from "@/components/extraction-review";
 import { PriceChart } from "@/components/price-chart";
 import { StockChat, type ChatMessage } from "@/components/stock-chat";
 import { StockInsights } from "@/components/stock-insights";
+import {
+  ConcallSummaries,
+  type ConcallEntry,
+} from "@/components/concall-summaries";
 import type { Insights } from "@/lib/insights-schema";
+import type { ConcallSummary } from "@/lib/concall-schema";
 import { SavedFinancials } from "@/components/saved-financials";
 import { createClient } from "@/lib/supabase/server";
 import { deleteDocument, deleteStock } from "../actions";
@@ -81,6 +86,31 @@ export default async function StockPage({
     .order("created_at");
 
   const chatMessages = (chatData ?? []) as ChatMessage[];
+
+  const { data: concallRows } = await supabase
+    .from("concall_summaries")
+    .select("document_id, content, generated_at")
+    .eq("stock_id", stock.id);
+
+  const summaryByDocument = new Map(
+    (concallRows ?? []).map((row) => [
+      row.document_id as string,
+      row as { content: unknown; generated_at: string },
+    ]),
+  );
+
+  const concallEntries: ConcallEntry[] = documents
+    .filter((doc) => doc.kind === "concall")
+    .map((doc) => {
+      const saved = summaryByDocument.get(doc.id);
+      return {
+        documentId: doc.id,
+        periodLabel: doc.period_label,
+        fileName: doc.file_name,
+        summary: (saved?.content as ConcallSummary | undefined) ?? null,
+        generatedAt: saved?.generated_at ?? null,
+      };
+    });
 
   const { data: insightsRow } = await supabase
     .from("stock_insights")
@@ -214,6 +244,8 @@ export default async function StockPage({
       </div>
 
       <SavedFinancials rows={financials} />
+
+      <ConcallSummaries entries={concallEntries} />
 
       <StockChat
         stockId={stock.id}

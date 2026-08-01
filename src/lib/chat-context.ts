@@ -2,6 +2,7 @@ import { SECTIONS } from "./extraction-schema";
 import { computeRatios, operatingProfit, RATIOS } from "./ratios";
 import { sortByPeriod } from "./periods";
 import type { PriceSummary } from "./prices";
+import type { ConcallSummary } from "./concall-schema";
 import type { FinancialRow } from "@/types/financial";
 
 /**
@@ -17,6 +18,7 @@ export function buildStockContext(input: {
   sector: string | null;
   rows: FinancialRow[];
   price: PriceSummary | null;
+  concalls?: { period: string; summary: ConcallSummary }[];
 }) {
   const lines: string[] = [];
 
@@ -46,6 +48,49 @@ export function buildStockContext(input: {
     lines.push(
       "Windows longer than the company's listing history are omitted rather than shortened.",
     );
+  }
+
+  // Earnings calls, where management commentary and guidance live. Figures
+  // answer what happened; calls answer what was said about it.
+  for (const call of input.concalls ?? []) {
+    const summary = call.summary;
+    lines.push(`\n## Earnings call — ${call.period}`);
+    lines.push(`Takeaway: ${summary.headline}`);
+    lines.push(`Tone: ${summary.sentiment} (${summary.sentiment_basis})`);
+
+    if (summary.key_points.length > 0) {
+      lines.push(`Management said: ${summary.key_points.join("; ")}`);
+    }
+    if (summary.guidance.length > 0) {
+      lines.push(
+        `Guidance: ${summary.guidance
+          .map(
+            (item) =>
+              `${item.topic} — ${item.said} (${item.quantified ? "with numbers" : "no numbers given"})`,
+          )
+          .join("; ")}`,
+      );
+    }
+    if (summary.analyst_focus.length > 0) {
+      lines.push(
+        `Analysts pressed on: ${summary.analyst_focus
+          .map((item) => `${item.question} → ${item.response}`)
+          .join("; ")}`,
+      );
+    }
+    if (summary.quotes.length > 0) {
+      lines.push(
+        `Quotes: ${summary.quotes
+          .map((item) => `${item.speaker}: "${item.quote}"`)
+          .join(" | ")}`,
+      );
+    }
+    if (summary.risks_flagged.length > 0) {
+      lines.push(`Risks they raised: ${summary.risks_flagged.join("; ")}`);
+    }
+    if (summary.not_addressed) {
+      lines.push(`Left unanswered: ${summary.not_addressed}`);
+    }
   }
 
   if (input.rows.length === 0) {
