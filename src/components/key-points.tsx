@@ -24,11 +24,14 @@ export function KeyPointsPanel({
   symbol,
   keyPoints,
   generatedAt,
+  hasPresentation,
 }: {
   stockId: string;
   symbol: string;
   keyPoints: KeyPoints | null;
   generatedAt: string | null;
+  /** Whether a deck has been uploaded — it changes where the facts come from. */
+  hasPresentation: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -67,11 +70,20 @@ export function KeyPointsPanel({
 
       {error && <p className="mt-3 text-sm text-negative">{error}</p>}
 
+      {!hasPresentation && (
+        <p className="mt-3 rounded-md border border-border bg-surface-sunken p-3 text-sm text-muted">
+          Upload {symbol}&apos;s latest investor presentation under Documents and
+          this reads the deck instead of searching the web. It&apos;s the
+          company&apos;s own account of itself — sharper facts, and cheaper,
+          since it stops searching altogether.
+        </p>
+      )}
+
       {!keyPoints ? (
         <p className="mt-4 text-sm text-muted">
           A short fact sheet — business model, scale, customers, guidance — with
-          a link on every point. Takes a few seconds and costs a few rupees, so
-          refresh it whenever you like.
+          a source on every point. Takes a few seconds and costs a few rupees,
+          so refresh it whenever you like.
         </p>
       ) : (
         <>

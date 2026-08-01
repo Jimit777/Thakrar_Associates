@@ -5,7 +5,11 @@ export type Stock = {
   sector: string | null;
 };
 
-export type DocumentKind = "annual_report" | "quarterly_result" | "concall";
+export type DocumentKind =
+  | "annual_report"
+  | "quarterly_result"
+  | "concall"
+  | "presentation";
 
 export type StockDocument = {
   id: string;
@@ -22,6 +26,7 @@ export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
   annual_report: "Annual report",
   quarterly_result: "Quarterly result",
   concall: "Concall transcript",
+  presentation: "Investor presentation",
 };
 
 /**

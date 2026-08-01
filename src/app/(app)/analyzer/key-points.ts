@@ -49,18 +49,33 @@ export async function generateKeyPoints(
 
   if (!stock) return { error: "Stock not found." };
 
-  const [{ data: financialsData }, { data: concallRows }] = await Promise.all([
-    supabase
-      .from("financials")
-      .select("id, period_type, period_label, basis, currency_unit, data")
-      .eq("stock_id", stock.id),
-    supabase
-      .from("concall_summaries")
-      .select("content, generated_at, documents(period_label)")
-      .eq("stock_id", stock.id)
-      .order("generated_at", { ascending: false })
-      .limit(2),
-  ]);
+  const [{ data: financialsData }, { data: concallRows }, { data: deck }] =
+    await Promise.all([
+      supabase
+        .from("financials")
+        .select("id, period_type, period_label, basis, currency_unit, data")
+        .eq("stock_id", stock.id),
+      supabase
+        .from("concall_summaries")
+        .select("content, generated_at, documents(period_label)")
+        .eq("stock_id", stock.id)
+        .order("generated_at", { ascending: false })
+        .limit(2),
+      // The most recent investor presentation, if one has been uploaded. It is
+      // the primary source for almost everything a fact sheet wants.
+      supabase
+        .from("documents")
+        .select("period_label, storage_path, file_name")
+        .eq("stock_id", stock.id)
+        .eq("kind", "presentation")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle<{
+          period_label: string;
+          storage_path: string;
+          file_name: string;
+        }>(),
+    ]);
 
   const rows: FinancialRow[] = sortByPeriod(
     (financialsData ?? []).map((row) => ({
@@ -91,6 +106,25 @@ export async function generateKeyPoints(
     concalls,
   });
 
+  // A deck is the company's own account of itself, so when one is available it
+  // replaces searching entirely: primary source, one request, no guessing which
+  // of five news articles paraphrased the slide correctly.
+  let deckBase64: string | null = null;
+
+  if (deck) {
+    const { data: file } = await supabase.storage
+      .from("documents")
+      .download(deck.storage_path);
+
+    if (file) {
+      const encoded = Buffer.from(await file.arrayBuffer()).toString("base64");
+      // The API caps a request at 32 MB and base64 inflates by about a third.
+      // A presentation this large is a scan; fall back to searching instead of
+      // failing the whole action.
+      if (encoded.length < 20_000_000) deckBase64 = encoded;
+    }
+  }
+
   const client = new Anthropic({ apiKey });
 
   try {
@@ -103,21 +137,50 @@ export async function generateKeyPoints(
       // ceiling above is what keeps this short, which is the point anyway.
       output_config: { format: zodOutputFormat(KeyPointsSchema) },
       system: KEY_POINTS_PROMPT,
-      tools: [
-        {
-          type: "web_search_20260209",
-          name: "web_search",
-          max_uses: 3,
-          // Haiku can't call tools programmatically, and the search tool asks
-          // for that by default. "direct" is the plain call-and-get-results
-          // path, which is all a fact sheet needs.
-          allowed_callers: ["direct"],
-        },
-      ],
+      // Searching only earns its cost when there is no deck to read. With one,
+      // a search would just find a worse version of what is already in hand —
+      // so the tool is left off the request entirely rather than offered and
+      // hopefully declined.
+      ...(deckBase64
+        ? {}
+        : {
+            tools: [
+              {
+                type: "web_search_20260209" as const,
+                name: "web_search",
+                max_uses: 3,
+                // Haiku can't call tools programmatically, and the search tool
+                // asks for that by default. "direct" is the plain
+                // call-and-get-results path, which is all a fact sheet needs.
+                allowed_callers: ["direct" as const],
+              },
+            ],
+          }),
       messages: [
         {
           role: "user",
-          content: `Write the key points for ${stock.symbol}${stock.name ? ` (${stock.name})` : ""}, an Indian listed company.\n\nWhat the user has already confirmed:\n\n${context}`,
+          content: [
+            ...(deckBase64 && deck
+              ? ([
+                  {
+                    type: "document" as const,
+                    source: {
+                      type: "base64" as const,
+                      media_type: "application/pdf" as const,
+                      data: deckBase64,
+                    },
+                  },
+                  {
+                    type: "text" as const,
+                    text: `The document above is ${stock.symbol}'s investor presentation for ${deck.period_label} (${deck.file_name}). Take the key points from it — it is the company's own account of itself, and you have no web search here. Cite it as "${deck.period_label} investor presentation" with an empty URL.`,
+                  },
+                ])
+              : []),
+            {
+              type: "text" as const,
+              text: `Write the key points for ${stock.symbol}${stock.name ? ` (${stock.name})` : ""}, an Indian listed company.\n\nWhat the user has already confirmed:\n\n${context}`,
+            },
+          ],
         },
       ],
     });

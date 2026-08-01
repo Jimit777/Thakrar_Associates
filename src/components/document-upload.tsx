@@ -90,7 +90,8 @@ export function DocumentUpload({
     >
       <h2 className="text-base font-medium">Upload a report</h2>
       <p className="mt-1 text-sm text-muted">
-        Annual reports, quarterly results, or concall transcripts as PDF.
+        Annual reports, quarterly results, concall transcripts or investor
+        presentations, as PDF.
       </p>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-3">

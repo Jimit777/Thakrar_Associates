@@ -170,6 +170,9 @@ export default async function StockPage({
                   symbol={stock.symbol}
                   keyPoints={(keyPointsRow?.content as KeyPoints | null) ?? null}
                   generatedAt={keyPointsRow?.generated_at ?? null}
+                  hasPresentation={documents.some(
+                    (doc) => doc.kind === "presentation",
+                  )}
                 />
 
                 <Suspense fallback={<PriceAndValuationSkeleton />}>
