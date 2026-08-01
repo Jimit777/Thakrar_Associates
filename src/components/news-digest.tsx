@@ -101,7 +101,7 @@ function SearchPanel() {
   }
 
   return (
-    <section className="rounded-lg border border-border bg-surface p-5">
+    <section className="rounded-lg border border-border bg-surface p-4 sm:p-5">
       <h2 className="text-base font-medium">Look something up</h2>
       <p className="mt-0.5 text-xs text-muted">
         Any stock or sector — you don&apos;t have to hold it.
@@ -255,7 +255,7 @@ export function NewsDigestView({
             )}
 
             {digest.macro.length > 0 && (
-              <div className="rounded-lg border border-border bg-surface p-5">
+              <div className="rounded-lg border border-border bg-surface p-4 sm:p-5">
                 <h3 className="text-sm font-medium">Across the market</h3>
                 <ul className="mt-3">
                   {digest.macro.map((item) => (
@@ -268,7 +268,7 @@ export function NewsDigestView({
             {digest.sectors.map((sector) => (
               <div
                 key={sector.sector}
-                className="rounded-lg border border-border bg-surface p-5"
+                className="rounded-lg border border-border bg-surface p-4 sm:p-5"
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <h3 className="text-sm font-medium">{sector.sector}</h3>

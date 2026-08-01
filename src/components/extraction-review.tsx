@@ -190,9 +190,9 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-background/95 p-6">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-background/95 p-4 sm:p-6">
       <div className="mx-auto max-w-6xl">
-        <header className="flex items-start justify-between gap-4">
+        <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-xl font-semibold">Review extracted figures</h2>
             <p className="mt-1 text-sm text-muted">
@@ -287,7 +287,7 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
             No periods were found in this document.
           </p>
         ) : (
-          <div className="mt-6 overflow-x-auto rounded-lg border border-border">
+          <div className="scroll-x mt-6 rounded-lg border border-border">
             <table className="w-full border-collapse bg-surface">
               <thead>
                 <tr className="border-b border-border bg-surface-sunken text-left">

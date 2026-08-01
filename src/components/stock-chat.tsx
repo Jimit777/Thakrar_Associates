@@ -38,7 +38,7 @@ function AnswerBody({ content }: { content: string }) {
             />
           ),
           table: (props) => (
-            <div className="overflow-x-auto rounded-md border border-border">
+            <div className="scroll-x rounded-md border border-border">
               <table className="w-full border-collapse text-xs" {...props} />
             </div>
           ),
@@ -190,7 +190,7 @@ export function StockChat({
   }
 
   return (
-    <section className="mt-8 rounded-lg border border-border bg-surface p-5">
+    <section className="rounded-lg border border-border bg-surface p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-medium">Ask about {symbol}</h2>

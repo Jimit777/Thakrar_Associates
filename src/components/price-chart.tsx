@@ -13,17 +13,13 @@ import {
 import { getPriceHistory } from "@/app/(app)/analyzer/price";
 import { PRICE_RANGES, type PriceHistory, type PriceRangeId } from "@/lib/prices";
 
-const SERIES_BLUE = "#0369A1";
-const INK = "#7c2d12";
-const MUTED = "#a4552a";
-const GRID = "#f0d6bf";
-const SURFACE = "#fffdfb";
+const SERIES_CLAY = "#A9502F";
+const INK = "#111827";
+const MUTED = "#6B7280";
+const GRID = "#E5E7EB";
+const SURFACE = "#FFFFFF";
 
-const rupees = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  maximumFractionDigits: 2,
-});
+const rupees = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
 const compact = new Intl.NumberFormat("en-IN", {
   notation: "compact",
   maximumFractionDigits: 1,
@@ -120,12 +116,12 @@ export function PriceChart({
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <section className="rounded-lg border border-border bg-surface p-5">
+    <section className="rounded-lg border border-border bg-surface p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-base font-medium">Price history</h2>
           <p className="mt-0.5 text-xs text-muted">
-            {history ? history.ticker : symbol} · daily closing price
+            {history ? history.ticker : symbol} · daily closing price, INR
           </p>
         </div>
 
@@ -215,7 +211,7 @@ export function PriceChart({
 
       {error && <p className="mt-3 text-sm text-negative">{error}</p>}
 
-      <div className="mt-4 h-72">
+      <div className="mt-4 h-64 sm:h-72">
         {pending && points.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-muted">
             Loading prices…
@@ -263,7 +259,7 @@ export function PriceChart({
                 type="monotone"
                 dataKey="close"
                 name="Close"
-                stroke={SERIES_BLUE}
+                stroke={SERIES_CLAY}
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4, strokeWidth: 2, stroke: SURFACE }}

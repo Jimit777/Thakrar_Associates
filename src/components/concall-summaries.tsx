@@ -155,7 +155,7 @@ export function ConcallSummaries({ entries }: { entries: ConcallEntry[] }) {
   }
 
   return (
-    <section className="mt-8">
+    <section>
       <div className="mb-3">
         <h2 className="text-base font-medium">Earnings calls</h2>
         <p className="mt-0.5 text-xs text-muted">

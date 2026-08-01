@@ -22,15 +22,15 @@ import type { FinancialRow } from "@/types/financial";
  * is on the chart.
  */
 const SERIES = {
-  blue: "#0369A1",
-  orange: "#C2410C",
+  clay: "#A9502F",
   purple: "#7E22CE",
+  cyan: "#0891B2",
 } as const;
 
-const INK = "#7c2d12";
-const MUTED = "#a4552a";
-const GRID = "#f0d6bf";
-const SURFACE = "#fffdfb";
+const INK = "#111827";
+const MUTED = "#6B7280";
+const GRID = "#E5E7EB";
+const SURFACE = "#FFFFFF";
 
 const compact = new Intl.NumberFormat("en-IN", {
   notation: "compact",
@@ -61,7 +61,7 @@ function ChartCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-surface p-5">
+    <div className="rounded-lg border border-border bg-surface p-4 sm:p-5">
       <h3 className="text-sm font-medium">{title}</h3>
       <p className="mt-0.5 text-xs text-muted">{subtitle}</p>
       <div className="mt-4 h-64">
@@ -146,7 +146,7 @@ export function FinancialCharts({
             <Bar
               dataKey="revenue"
               name="Revenue"
-              fill={SERIES.blue}
+              fill={SERIES.clay}
               radius={[4, 4, 0, 0]}
               stroke={SURFACE}
               strokeWidth={2}
@@ -154,7 +154,7 @@ export function FinancialCharts({
             <Bar
               dataKey="netProfit"
               name="Net profit"
-              fill={SERIES.orange}
+              fill={SERIES.purple}
               radius={[4, 4, 0, 0]}
               stroke={SURFACE}
               strokeWidth={2}
@@ -185,7 +185,7 @@ export function FinancialCharts({
               type="monotone"
               dataKey="opm"
               name="Operating margin"
-              stroke={SERIES.blue}
+              stroke={SERIES.clay}
               strokeWidth={2}
               dot={{ r: 4, strokeWidth: 2, stroke: SURFACE }}
               connectNulls
@@ -194,7 +194,7 @@ export function FinancialCharts({
               type="monotone"
               dataKey="npm"
               name="Net margin"
-              stroke={SERIES.orange}
+              stroke={SERIES.purple}
               strokeWidth={2}
               dot={{ r: 4, strokeWidth: 2, stroke: SURFACE }}
               connectNulls
@@ -220,7 +220,7 @@ export function FinancialCharts({
             <Bar
               dataKey="operating"
               name="Operating"
-              fill={SERIES.blue}
+              fill={SERIES.clay}
               radius={[4, 4, 0, 0]}
               stroke={SURFACE}
               strokeWidth={2}
@@ -228,7 +228,7 @@ export function FinancialCharts({
             <Bar
               dataKey="investing"
               name="Investing"
-              fill={SERIES.orange}
+              fill={SERIES.purple}
               radius={[4, 4, 0, 0]}
               stroke={SURFACE}
               strokeWidth={2}
@@ -236,7 +236,7 @@ export function FinancialCharts({
             <Bar
               dataKey="financing"
               name="Financing"
-              fill={SERIES.purple}
+              fill={SERIES.cyan}
               radius={[4, 4, 0, 0]}
               stroke={SURFACE}
               strokeWidth={2}

@@ -41,7 +41,7 @@ export default async function AnalyzerPage() {
                 <Link
                   key={stock.id}
                   href={`/analyzer/${stock.symbol}`}
-                  className="rounded-lg border border-border bg-surface p-5 transition-colors hover:border-accent"
+                  className="rounded-lg border border-border bg-surface p-4 sm:p-5 transition-colors hover:border-accent"
                 >
                   <h2 className="text-lg font-medium">{stock.symbol}</h2>
                   {stock.name && (

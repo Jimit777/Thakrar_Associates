@@ -1,17 +1,23 @@
 import type { Metadata } from "next";
-import { Josefin_Sans, JetBrains_Mono } from "next/font/google";
+import { Poppins, DM_Mono } from "next/font/google";
 import "./globals.css";
 
-// Brand, headings and interface text: geometric sans with a distinctive look.
-const josefinSans = Josefin_Sans({
+// Geometric and open — softer than a neutral UI sans without losing clarity.
+const poppins = Poppins({
   variable: "--font-body",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500", "600"],
 });
 
-// Numbers: fixed-width digits so figures line up in columns.
-const jetbrainsMono = JetBrains_Mono({
+/*
+ * Figures stay monospaced so columns line up: in a proportional font a "1" is
+ * narrower than an "8", and a table of periods jitters as values change.
+ * DM Mono is rounder than the usual coding monospace and sits well with Poppins.
+ */
+const dmMono = DM_Mono({
   variable: "--font-mono",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
@@ -27,7 +33,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${josefinSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${poppins.variable} ${dmMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

@@ -3,21 +3,32 @@
 /*
  * Light mode only. `color-scheme: light` stops the browser from auto-darkening
  * form controls and scrollbars if the user's device is set to dark mode.
+ *
+ * Almost every colour in the app resolves through these tokens, so the whole
+ * look changes from here rather than from a thousand class names.
  */
 :root {
   color-scheme: light;
 
-  --background: #fffaf5; /* warm off-white page */
-  --surface: #fffdfb; /* cards, tables */
-  --surface-sunken: #fdf4ec; /* table headers, subtle bands */
+  --background: #f4f5f7; /* page canvas */
+  --surface: #ffffff; /* cards and panels sit above the canvas */
+  --surface-sunken: #f9fafb; /* table headers, quiet bands inside a card */
 
-  --foreground: #7c2d12; /* dark orange — main text */
-  --muted: #a4552a; /* secondary text and labels */
-  --accent: #c2410c; /* buttons, links, active state */
-  --border: #f0d6bf;
+  --foreground: #111827; /* headings and figures */
+  --secondary: #4b5563; /* body copy that isn't the main point */
+  --muted: #6b7280; /* labels, captions, metadata */
 
-  --positive: #15803d; /* gains */
-  --negative: #b91c1c; /* losses */
+  --accent: #a9502f;
+  --accent-hover: #8f4227;
+  --accent-tint: #faf0eb; /* accent backgrounds that carry dark text */
+
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+
+  --positive: #059669;
+  --positive-tint: #ecfdf5;
+  --negative: #dc2626;
+  --negative-tint: #fef2f2;
 }
 
 @theme inline {
@@ -25,15 +36,24 @@
   --color-surface: var(--surface);
   --color-surface-sunken: var(--surface-sunken);
   --color-foreground: var(--foreground);
+  --color-secondary: var(--secondary);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-tint: var(--accent-tint);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-positive: var(--positive);
+  --color-positive-tint: var(--positive-tint);
   --color-negative: var(--negative);
+  --color-negative-tint: var(--negative-tint);
 
   --font-sans: var(--font-body);
-  --font-display: var(--font-body);
   --font-mono: var(--font-mono);
+
+  /* Cards are slightly softer than controls. */
+  --radius-lg: 10px;
+  --radius-md: 8px;
 }
 
 body {
@@ -42,27 +62,81 @@ body {
   font-family: var(--font-body), system-ui, sans-serif;
 }
 
-/*
- * Josefin Sans has a small x-height, so headings get slightly tighter spacing
- * to keep them looking deliberate rather than airy.
- */
 h1,
 h2,
 h3 {
   font-family: var(--font-body), system-ui, sans-serif;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.011em;
 }
 
 /* Small uppercase labels above figures — a common finance-UI pattern. */
 .stat-label {
   font-size: 0.6875rem;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
-/* Figures: monospace with aligned digits. */
+/* Figures: monospace with digits that line up in a column. */
 .figure {
   font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Keyboard focus should always be visible. `:focus-visible` means the ring
+ * appears when tabbing but not when clicking, so it never looks like a stray
+ * outline. The outline follows each element's own corner radius.
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+/*
+ * Grey blocks stood in for content while a page loads. The pulse is what tells
+ * the reader it is still working rather than broken.
+ */
+.skeleton {
+  background: var(--border);
+  border-radius: 6px;
+  animation: skeleton-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/*
+ * Wide tables and the tab bar scroll sideways on a phone. A thin scrollbar
+ * keeps that obvious without eating a row of pixels on desktop.
+ */
+.scroll-x {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Anyone who has asked their system to reduce motion gets none of it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

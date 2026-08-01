@@ -83,7 +83,7 @@ export function StockInsights({
   }
 
   return (
-    <section className="mt-8">
+    <section>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-medium">Business briefing</h2>
@@ -128,7 +128,7 @@ export function StockInsights({
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="rounded-lg border border-border bg-surface p-5">
+          <div className="rounded-lg border border-border bg-surface p-4 sm:p-5">
             <p className="text-sm leading-relaxed">{insights.business.summary}</p>
 
             <dl className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2">
@@ -192,7 +192,7 @@ export function StockInsights({
           </div>
 
           {insights.watch.length > 0 && (
-            <div className="rounded-lg border border-border bg-surface p-5">
+            <div className="rounded-lg border border-border bg-surface p-4 sm:p-5">
               <h3 className="stat-label">What to watch next</h3>
               <ul className="mt-2 space-y-2.5">
                 {insights.watch.map((item) => (
@@ -214,7 +214,7 @@ export function StockInsights({
           )}
 
           {insights.sources?.length > 0 && (
-            <div className="rounded-lg border border-border bg-surface p-5">
+            <div className="rounded-lg border border-border bg-surface p-4 sm:p-5">
               <h3 className="stat-label">Sources</h3>
               <ul className="mt-2 space-y-1.5">
                 {insights.sources.map((source) => (

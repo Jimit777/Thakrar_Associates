@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeading, EmptyState } from "@/components/page-heading";
 import { DocumentUpload } from "@/components/document-upload";
-import { ExtractionReview } from "@/components/extraction-review";
+import { DocumentsTable } from "@/components/documents-table";
 import { PriceChart } from "@/components/price-chart";
 import { StockChat, type ChatMessage } from "@/components/stock-chat";
+import { StockTabs } from "@/components/stock-tabs";
 import { StockInsights } from "@/components/stock-insights";
 import {
   ConcallSummaries,
@@ -14,31 +15,14 @@ import type { Insights } from "@/lib/insights-schema";
 import type { ConcallSummary } from "@/lib/concall-schema";
 import { SavedFinancials } from "@/components/saved-financials";
 import { createClient } from "@/lib/supabase/server";
-import { deleteDocument, deleteStock } from "../actions";
+import { deleteStock } from "../actions";
 import { getPriceHistory } from "../price";
 import { sortByPeriod } from "@/lib/periods";
-import {
-  DOCUMENT_KIND_LABELS,
-  type StockDocument,
-  type Stock,
-} from "@/types/stock";
+import { type StockDocument, type Stock } from "@/types/stock";
 import { normaliseFigures, type FinancialRow } from "@/types/financial";
 
 // Reading a long report can take a few minutes, so allow for it.
 export const maxDuration = 300;
-
-function formatFileSize(bytes: number | null) {
-  if (!bytes) return "—";
-  const mb = bytes / (1024 * 1024);
-  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
-}
-
-function formatDate(iso: string) {
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeZone: "Asia/Kolkata",
-  }).format(new Date(iso));
-}
 
 export default async function StockPage({
   params,
@@ -160,98 +144,89 @@ export default async function StockPage({
         }
       />
 
-      <PriceChart
-        symbol={stock.symbol}
-        initialHistory={initialPrices.ok ? initialPrices.history : null}
-        initialError={initialPrices.ok ? null : initialPrices.error}
-      />
+      <StockTabs
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            panel: (
+              <div className="space-y-8">
+                <PriceChart
+                  symbol={stock.symbol}
+                  initialHistory={initialPrices.ok ? initialPrices.history : null}
+                  initialError={initialPrices.ok ? null : initialPrices.error}
+                />
 
-      <StockInsights
-        stockId={stock.id}
-        symbol={stock.symbol}
-        insights={(insightsRow?.content as Insights | undefined) ?? null}
-        generatedAt={insightsRow?.generated_at ?? null}
-        periodsUsed={insightsRow?.periods_used ?? 0}
-        currentPeriods={financials.length}
-      />
-
-      <div className="mt-8">
-        <DocumentUpload stockId={stock.id} userId={user.id} />
-      </div>
-
-      <div className="mt-8">
-        {documents.length === 0 ? (
-          <EmptyState
-            title="No documents yet"
-            description="Upload an annual report or quarterly result above. Reading the figures out of them comes next."
-          />
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full min-w-2xl border-collapse bg-surface">
-              <thead>
-                <tr className="border-b border-border bg-surface-sunken text-left">
-                  <th className="stat-label px-4 py-3">Document</th>
-                  <th className="stat-label px-4 py-3">Type</th>
-                  <th className="stat-label px-4 py-3">Period</th>
-                  <th className="stat-label px-4 py-3 text-right">Size</th>
-                  <th className="stat-label px-4 py-3">Uploaded</th>
-                  <th className="stat-label px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {documents.map((doc) => (
-                  <tr key={doc.id} className="border-b border-border last:border-0">
-                    <td className="px-4 py-3 text-sm font-medium">{doc.file_name}</td>
-                    <td className="px-4 py-3 text-sm text-muted">
-                      {DOCUMENT_KIND_LABELS[doc.kind]}
-                    </td>
-                    <td className="figure px-4 py-3 text-sm">{doc.period_label}</td>
-                    <td className="figure px-4 py-3 text-right text-sm text-muted">
-                      {formatFileSize(doc.file_size_bytes)}
-                    </td>
-                    <td className="figure px-4 py-3 text-sm text-muted">
-                      {formatDate(doc.created_at)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-start justify-end gap-2">
-                        <ExtractionReview
-                          documentId={doc.id}
-                          stockId={stock.id}
-                          label={`${doc.file_name} (${doc.period_label})`}
-                        />
-                        <form action={deleteDocument} className="inline">
-                          <input type="hidden" name="id" value={doc.id} />
-                          <input
-                            type="hidden"
-                            name="storage_path"
-                            value={doc.storage_path}
-                          />
-                          <button
-                            type="submit"
-                            className="rounded border border-border px-2 py-1 text-xs transition-colors hover:border-negative hover:text-negative"
-                          >
-                            Delete
-                          </button>
-                        </form>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <SavedFinancials rows={financials} />
-
-      <ConcallSummaries entries={concallEntries} />
-
-      <StockChat
-        stockId={stock.id}
-        symbol={stock.symbol}
-        initialMessages={chatMessages}
-        hasFinancials={financials.length > 0}
+                <StockInsights
+                  stockId={stock.id}
+                  symbol={stock.symbol}
+                  insights={(insightsRow?.content as Insights | undefined) ?? null}
+                  generatedAt={insightsRow?.generated_at ?? null}
+                  periodsUsed={insightsRow?.periods_used ?? 0}
+                  currentPeriods={financials.length}
+                />
+              </div>
+            ),
+          },
+          {
+            id: "financials",
+            label: "Financials",
+            count: financials.length,
+            panel:
+              financials.length === 0 ? (
+                <EmptyState
+                  title="No figures yet"
+                  description="Upload a report under Documents, then extract its figures and confirm them."
+                />
+              ) : (
+                <SavedFinancials rows={financials} />
+              ),
+          },
+          {
+            id: "documents",
+            label: "Documents",
+            count: documents.length,
+            panel: (
+              <div className="space-y-8">
+                <DocumentUpload stockId={stock.id} userId={user.id} />
+                {documents.length === 0 ? (
+                  <EmptyState
+                    title="No documents yet"
+                    description="Upload an annual report or quarterly result above. Reading the figures out of them comes next."
+                  />
+                ) : (
+                  <DocumentsTable documents={documents} stockId={stock.id} />
+                )}
+              </div>
+            ),
+          },
+          {
+            id: "calls",
+            label: "Earnings calls",
+            count: concallEntries.length,
+            panel:
+              concallEntries.length === 0 ? (
+                <EmptyState
+                  title="No earnings calls yet"
+                  description="Upload a transcript under Documents with the type set to concall, then summarise it here."
+                />
+              ) : (
+                <ConcallSummaries entries={concallEntries} />
+              ),
+          },
+          {
+            id: "ask",
+            label: "Ask",
+            panel: (
+              <StockChat
+                stockId={stock.id}
+                symbol={stock.symbol}
+                initialMessages={chatMessages}
+                hasFinancials={financials.length > 0}
+              />
+            ),
+          },
+        ]}
       />
     </>
   );

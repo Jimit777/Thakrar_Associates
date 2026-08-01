@@ -52,9 +52,9 @@ export function SavedFinancials({ rows }: { rows: FinancialRow[] }) {
   const unit = units.length === 1 ? units[0] : null;
 
   return (
-    <section className="mt-8">
+    <section>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <h2 className="text-base font-medium">Financials</h2>
 
           <div className="flex gap-1.5">
@@ -125,7 +125,15 @@ export function SavedFinancials({ rows }: { rows: FinancialRow[] }) {
         </p>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-lg border border-border">
+          {/* Several periods will not fit across a phone, so say so rather than
+              leaving the extra columns to be discovered by accident. */}
+          {visible.length > 1 && (
+            <p className="mb-2 text-xs text-muted md:hidden">
+              Swipe the table sideways to see all {visible.length} periods.
+            </p>
+          )}
+
+          <div className="scroll-x rounded-lg border border-border">
             <table className="w-full border-collapse bg-surface">
               <thead>
                 <tr className="border-b border-border bg-surface-sunken text-left">
