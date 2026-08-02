@@ -1,6 +1,51 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildDigest } from "@/lib/digest";
+import { renderDigestEmail } from "@/lib/digest-email";
+import { sendEmail } from "@/lib/email";
+import type { NewsDigest } from "@/lib/news-schema";
+
+/**
+ * Sends a freshly built digest to the address the account was created with.
+ *
+ * No recipient is configured anywhere: the signed-up address is the one the
+ * user already proved they control, and asking for a second one would only be
+ * another thing to get wrong.
+ */
+async function emailDigest(supabase: SupabaseClient, userId: string) {
+  const { data: account } = await supabase.auth.admin.getUserById(userId);
+  const to = account?.user?.email;
+
+  if (!to) return { sent: false, error: "No email address on the account." };
+
+  const { data: row } = await supabase
+    .from("news_digests")
+    .select("content")
+    .eq("user_id", userId)
+    .maybeSingle<{ content: NewsDigest }>();
+
+  if (!row) return { sent: false, error: "No digest to send." };
+
+  const date = new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "full",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date());
+
+  const result = await sendEmail({
+    to,
+    subject: `Portfolio digest · ${date}`,
+    html: renderDigestEmail(row.content, date),
+  });
+
+  if (result.ok) return { sent: true };
+
+  // Email being switched off is a configuration choice, not a failure.
+  return {
+    sent: false,
+    ...(result.configured ? { error: result.error } : {}),
+  };
+}
 
 // A digest is several web searches and a Sonnet call per user.
 export const maxDuration = 300;
@@ -50,16 +95,32 @@ export async function GET(request: Request) {
     ...new Set((holders ?? []).map((row) => row.user_id as string)),
   ];
 
-  const results: { userId: string; ok: boolean; error?: string }[] = [];
+  const results: {
+    userId: string;
+    ok: boolean;
+    emailed?: boolean;
+    error?: string;
+  }[] = [];
 
   // Sequential on purpose: these are long, search-backed calls, and running
   // them all at once is a good way to hit a rate limit and lose the lot.
   for (const userId of userIds) {
     const result = await buildDigest(supabase, userId);
+
+    if (!result.ok) {
+      results.push({ userId, ok: false, error: result.error });
+      continue;
+    }
+
+    // Emailing is a separate concern from building: a mail failure must not
+    // lose a digest that was successfully assembled and saved.
+    const emailed = await emailDigest(supabase, userId);
+
     results.push({
       userId,
-      ok: Boolean(result.ok),
-      ...(result.error ? { error: result.error } : {}),
+      ok: true,
+      emailed: emailed.sent,
+      ...(emailed.error ? { error: emailed.error } : {}),
     });
   }
 

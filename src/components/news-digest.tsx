@@ -2,7 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { generateNewsDigest, searchNews } from "@/app/(app)/news/actions";
+import {
+  emailDigestNow,
+  generateNewsDigest,
+  searchNews,
+} from "@/app/(app)/news/actions";
 import type {
   NewsDigest,
   NewsItem,
@@ -190,15 +194,29 @@ export function NewsDigestView({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
 
   const missing = currentSymbols.filter((s) => !coveredSymbols.includes(s));
 
   function run() {
     setError(null);
+    setSent(false);
     startTransition(async () => {
       const result = await generateNewsDigest();
       if (result.error) setError(result.error);
       else router.refresh();
+    });
+  }
+
+  // Sends the digest already saved — no model call, so this is free and is
+  // also how you check the nightly send works without waiting for the night.
+  function email() {
+    setError(null);
+    setSent(false);
+    startTransition(async () => {
+      const result = await emailDigestNow();
+      if (result.error) setError(result.error);
+      else setSent(true);
     });
   }
 
@@ -217,21 +235,40 @@ export function NewsDigestView({
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={run}
-            disabled={pending}
-            className="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
-          >
-            {pending
-              ? "Reading the news…"
-              : digest
-                ? "Update"
-                : "Build"}
-          </button>
+          <div className="flex items-center gap-2">
+            {digest && (
+              <button
+                type="button"
+                onClick={email}
+                disabled={pending}
+                className="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+              >
+                {sent ? "Sent" : "Email it to me"}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={run}
+              disabled={pending}
+              className="rounded-md border border-border px-4 py-2 text-sm transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+            >
+              {pending
+                ? "Reading the news…"
+                : digest
+                  ? "Update"
+                  : "Build"}
+            </button>
+          </div>
         </div>
 
         {error && <p className="mt-3 text-sm text-negative">{error}</p>}
+        {sent && (
+          <p className="mt-3 text-sm text-positive">
+            Sent. If it doesn&apos;t arrive, check your spam folder — a new
+            sending domain often lands there the first time.
+          </p>
+        )}
 
         {digest && missing.length > 0 && (
           <p className="mt-3 text-xs text-muted">

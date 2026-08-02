@@ -11,6 +11,9 @@ import {
 } from "@/lib/news-schema";
 import { BRIEFING_MODEL } from "@/lib/models";
 import { buildDigest } from "@/lib/digest";
+import { renderDigestEmail } from "@/lib/digest-email";
+import { sendEmail } from "@/lib/email";
+import type { NewsDigest } from "@/lib/news-schema";
 
 export type NewsResult = { error?: string; ok?: boolean };
 
@@ -88,4 +91,48 @@ export async function generateNewsDigest(): Promise<NewsResult> {
 
   revalidatePath("/news");
   return { ok: true };
+}
+
+/**
+ * Emails the digest that is already saved, to the address on the account.
+ *
+ * Exists so the nightly send can be tested without waiting for the night, and
+ * so a digest worth keeping can be sent on demand. Nothing is regenerated —
+ * this costs no model call at all.
+ */
+export async function emailDigestNow(): Promise<NewsResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.email) {
+    return { error: "You are signed out. Refresh and sign in again." };
+  }
+
+  const { data: row } = await supabase
+    .from("news_digests")
+    .select("content")
+    .eq("user_id", user.id)
+    .maybeSingle<{ content: NewsDigest }>();
+
+  if (!row) return { error: "Build a digest first, then send it." };
+
+  const date = new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "full",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date());
+
+  const result = await sendEmail({
+    to: user.email,
+    subject: `Portfolio digest · ${date}`,
+    html: renderDigestEmail(row.content, date),
+  });
+
+  if (result.ok) return { ok: true };
+
+  return {
+    error: result.configured
+      ? result.error
+      : "Email isn't set up yet — add RESEND_API_KEY in Vercel and redeploy.",
+  };
 }
