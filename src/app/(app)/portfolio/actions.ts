@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { fetchQuotes } from "@/lib/prices";
+import { rememberCompanies } from "@/lib/companies";
 import type { Exchange } from "@/types/holding";
 
 export type HoldingFormState = { error?: string; success?: boolean };
@@ -88,6 +89,10 @@ export async function addHolding(
     }
     return { error: error.message };
   }
+
+  await rememberCompanies(supabase, user.id, [
+    { symbol: parsed.symbol, seenAs: "holding" },
+  ]);
 
   revalidatePath("/portfolio");
   revalidatePath("/");

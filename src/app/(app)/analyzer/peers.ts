@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { PeersSchema, PEERS_PROMPT } from "@/lib/peers-schema";
 import { KEY_POINTS_MODEL } from "@/lib/models";
+import { rememberCompanies } from "@/lib/companies";
 
 export type PeersResult = { error?: string; ok?: boolean };
 
@@ -79,6 +80,17 @@ export async function generatePeers(stockId: string): Promise<PeersResult> {
     }
 
     const content = PeersSchema.parse(JSON.parse(textBlock.text));
+
+    // Every company named here joins the reference set, so a peer you later
+    // decide to research is already known — name, and eventually sector.
+    await rememberCompanies(supabase, user.id, [
+      { symbol: stock.symbol, name: stock.name, seenAs: "stock" },
+      ...content.peers.map((peer) => ({
+        symbol: peer.symbol,
+        name: peer.name,
+        seenAs: "peer" as const,
+      })),
+    ]);
 
     const { error } = await supabase.from("stock_peers").upsert(
       {

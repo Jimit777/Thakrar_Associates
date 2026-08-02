@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { formatCurrency } from "@/lib/format";
+import { ClassifySectorsButton } from "@/components/classify-sectors-button";
 import type { Concentration, SectorSlice } from "@/lib/portfolio-analytics";
 
 /*
@@ -34,10 +34,20 @@ export function SectorAllocation({
 
   return (
     <section className="rounded-lg border border-border bg-surface p-4 sm:p-5">
-      <h2 className="text-base font-medium">Where your money sits</h2>
-      <p className="mt-0.5 text-xs text-muted">
-        By sector, at the last refreshed prices
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div>
+          <h2 className="text-base font-medium">Where your money sits</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            By sector, at the last refreshed prices
+          </p>
+        </div>
+
+        {unclassified.length > 0 && (
+          <div className="text-right">
+            <ClassifySectorsButton count={unclassified.length} />
+          </div>
+        )}
+      </div>
 
       {/* One stacked bar first: the shape of the portfolio in a single glance,
           before any of the numbers. */}
@@ -93,11 +103,8 @@ export function SectorAllocation({
 
       {unclassified.length > 0 && (
         <p className="mt-3 text-xs text-muted">
-          No sector set for {unclassified.join(", ")}. Add one on the{" "}
-          <Link href="/analyzer" className="text-accent underline">
-            stock&apos;s page
-          </Link>{" "}
-          and it will join a bucket here.
+          No sector yet for {unclassified.join(", ")}. Classifying works them all
+          out in one go and remembers each company, so it is paid for once.
         </p>
       )}
     </section>

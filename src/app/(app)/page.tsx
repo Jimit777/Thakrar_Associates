@@ -69,6 +69,7 @@ export default async function DashboardPage() {
     { data: holdingsData },
     { data: stocksData },
     { data: documentsData },
+    { data: companiesData },
   ] = await Promise.all([
     supabase
       .from("holdings")
@@ -79,6 +80,7 @@ export default async function DashboardPage() {
       .select("id, stock_id, period_label, created_at")
       .order("created_at", { ascending: false })
       .limit(4),
+    supabase.from("companies").select("symbol, sector"),
   ]);
 
   const holdings: HoldingRow[] = (holdingsData ?? []).map((row) => ({
@@ -145,11 +147,17 @@ export default async function DashboardPage() {
     sector: string | null;
   }[];
 
+  // Two sources, and the one you set yourself wins: a sector typed on the
+  // stock's page is a correction of whatever the app worked out.
   const sectorBySymbol = new Map(
-    stocks
-      .filter((s) => s.sector)
-      .map((s) => [s.symbol, s.sector as string]),
+    ((companiesData ?? []) as { symbol: string; sector: string | null }[])
+      .filter((c) => c.sector)
+      .map((c) => [c.symbol, c.sector as string]),
   );
+
+  for (const stock of stocks) {
+    if (stock.sector) sectorBySymbol.set(stock.symbol, stock.sector);
+  }
 
   const sectors = sectorBreakdown(valued, sectorBySymbol);
   const flags = concentrationFlags(valued, sectors);

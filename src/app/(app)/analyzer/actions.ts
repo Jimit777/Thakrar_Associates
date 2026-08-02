@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { rememberCompanies } from "@/lib/companies";
 import type { DocumentKind } from "@/types/stock";
 
 export type StockFormState = { error?: string; success?: boolean };
@@ -41,7 +42,22 @@ export async function addStock(
     return { error: error.message };
   }
 
+  await rememberCompanies(supabase, user.id, [
+    { symbol, name: name || null, seenAs: "stock" },
+  ]);
+
+  // A sector typed here is the user's own, so it is recorded as such and never
+  // overwritten by the classifier later.
+  if (sector) {
+    await supabase
+      .from("companies")
+      .update({ sector, sector_source: "user" })
+      .eq("user_id", user.id)
+      .eq("symbol", symbol);
+  }
+
   revalidatePath("/analyzer");
+  revalidatePath("/");
   return { success: true };
 }
 
