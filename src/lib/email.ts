@@ -18,13 +18,28 @@ export async function sendEmail(message: {
   subject: string;
   html: string;
 }): Promise<SendResult> {
-  const apiKey = process.env.RESEND_API_KEY;
+  const apiKey = process.env.RESEND_API_KEY?.trim();
 
   if (!apiKey) {
     return {
       ok: false,
       configured: false,
       error: "RESEND_API_KEY is not set, so email is turned off.",
+    };
+  }
+
+  /*
+   * Checked before use, because the failure otherwise is `fetch` throwing from
+   * Headers.append with the whole value quoted back in the message — which is
+   * how a mistyped variable ends up echoed into an HTTP response. A Resend key
+   * is a single line beginning `re_`.
+   */
+  if (!/^re_[A-Za-z0-9_-]+$/.test(apiKey)) {
+    return {
+      ok: false,
+      configured: true,
+      error:
+        "RESEND_API_KEY doesn't look like a Resend key — they start with 're_' and are a single line. Check what's in the variable.",
     };
   }
 
@@ -55,10 +70,14 @@ export async function sendEmail(message: {
 
     return { ok: true };
   } catch (cause) {
+    const message = cause instanceof Error ? cause.message : "Sending failed.";
+
+    // Belt and braces: nothing that came out of the key ever goes back out in
+    // a response, whatever the underlying error decided to quote.
     return {
       ok: false,
       configured: true,
-      error: cause instanceof Error ? cause.message : "Sending failed.",
+      error: message.split(apiKey).join("[redacted]"),
     };
   }
 }
