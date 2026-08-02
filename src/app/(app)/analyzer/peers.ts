@@ -48,13 +48,16 @@ export async function generatePeers(stockId: string): Promise<PeersResult> {
   try {
     const message = await client.messages.create({
       model: BRIEFING_MODEL,
-      max_tokens: 6000,
+      max_tokens: 8000,
       output_config: {
         effort: "medium",
         format: zodOutputFormat(PeersSchema),
       },
       system: PEERS_PROMPT,
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 4 }],
+      // Six metrics across four peers is two dozen figures. Four searches left
+      // the table full of blanks; the budget is now one search to name the
+      // peers and roughly two per peer to fill their rows.
+      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 10 }],
       messages: [
         {
           role: "user",
