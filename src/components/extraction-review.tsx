@@ -268,6 +268,49 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
           </p>
         )}
 
+        {(() => {
+          // The same period appearing twice under different bases is normal —
+          // consolidated and standalone are different sets of figures. The same
+          // period appearing twice where one is "unknown" usually is not: it is
+          // the sign of a summary table having been read alongside the audited
+          // statements, and its numbers will not agree.
+          const suspect = [
+            ...new Set(
+              draft.periods
+                .filter((period) => period.basis === "unknown")
+                .filter((period) =>
+                  draft.periods.some(
+                    (other) =>
+                      other !== period &&
+                      other.period_label === period.period_label &&
+                      other.period_type === period.period_type &&
+                      other.basis !== "unknown",
+                  ),
+                )
+                .map((period) => period.period_label),
+            ),
+          ];
+
+          if (suspect.length === 0) return null;
+
+          return (
+            <p className="mt-3 rounded-md border border-negative/40 bg-surface-sunken p-3 text-sm leading-relaxed">
+              <span className="stat-label text-negative">
+                Check {suspect.join(", ")} before saving
+              </span>
+              <br />
+              <span className="text-muted">
+                {suspect.length === 1 ? "This period appears" : "These periods appear"}{" "}
+                twice — once with a stated basis and once as
+                &ldquo;unknown&rdquo;. That usually means a summary or
+                highlights table was read alongside the audited statements, and
+                its figures will not match. Compare the columns, then remove the
+                unknown one with the × above it unless you can tell what it is.
+              </span>
+            </p>
+          );
+        })()}
+
         {filtered && filtered.dropped > 0 && (
           <p className="mt-3 rounded-md border border-border bg-surface-sunken p-3 text-sm leading-relaxed">
             <span className="stat-label">Periods left out</span>

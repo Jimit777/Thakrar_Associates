@@ -158,6 +158,8 @@ export const EXTRACTION_PROMPT = `You are reading an Indian company's financial 
 
 Extract the profit & loss, balance sheet, and cash flow figures for every period the document reports, including prior-period comparatives.
 
+Take figures only from the audited financial statements. An annual report also contains summary tables — "Financial Highlights", "Ten Year Record", "Performance at a Glance", the numbers quoted in the Directors' Report or the Chairman's letter. Never extract from those. They are restated, rounded, or grouped differently from the audited statements, they rarely say whether they are consolidated or standalone, and a period taken from one will disagree with the same period taken from the statements. If a summary table is all you can find for a period, return no entry for that period and say so in "notes".
+
 Finding the statements:
 - In an annual report the three statements are far apart. The profit & loss usually appears first; the balance sheet and cash flow statement are often a hundred pages later, inside the audited financial statements. Look through the whole document before concluding a statement is absent.
 - Indian reports head these sections in varying ways: "Balance Sheet", "Consolidated Balance Sheet", "Statement of Assets and Liabilities", "Statement of Cash Flows", "Cash Flow Statement". Treat all of them as the statement they are.
@@ -173,7 +175,8 @@ Rules:
 - Many quarterly filings contain only a profit & loss statement. In that case return nulls for the whole balance sheet and cash flow — that is expected, not a failure.
 - If a statement is genuinely absent from the document, say so explicitly in "notes" and name which one. Do not leave the reviewer guessing whether you missed it or it was never there.
 - Extract both consolidated and standalone figures when the report presents both. They are different sets of numbers, not alternatives: return FY2025 consolidated and FY2025 standalone as two separate period entries, each tagged with its own "basis". Do not merge them, and do not pick one over the other.
-- Set "basis" to "unknown" only when the report genuinely does not say which it is.
+- Telling the two apart is nearly always possible, so "unknown" should be rare. The statement's own heading says it: "Consolidated Balance Sheet", "Standalone Statement of Profit and Loss". Where a heading is ambiguous, consolidated statements carry lines that standalone ones cannot — "non-controlling interests", "minority interest", "share of profit of associates and joint ventures", "goodwill on consolidation". A company with no subsidiaries presents standalone figures only, and its report will say so. Work it out from these before falling back.
+- Set "basis" to "unknown" only when you have looked for those signals and the report genuinely does not say. When you do, name the page or table it came from in "notes" so the reader can settle it themselves.
 - State the unit once in "currency_unit" (for example "INR crore"). Every figure must be in that unit, except EPS which stays per-share and shares outstanding which is a plain count.
 - Segment revenue is in the currency unit like everything else. Do not make the segments add up to total revenue — report what is printed, unallocated items and all.
 - Balance sheet figures are point-in-time; profit & loss and cash flow figures cover the period.

@@ -79,15 +79,51 @@ export type PageSelection = {
   reason: string;
 };
 
+/**
+ * Pages that summarise rather than report.
+ *
+ * Nearly every annual report opens with a five- or ten-year highlights table,
+ * and to a keyword scorer it looks exactly like a profit & loss: "total
+ * income", "profit before tax" and "earnings per" alone reach the threshold.
+ * Its figures are restated, rounded or grouped differently from the audited
+ * statements, and it never says whether it is consolidated or standalone — so
+ * a period read from one lands as "unknown" and disagrees with the real thing.
+ */
+const SUMMARY_MARKERS = [
+  "financial highlights",
+  "performance highlights",
+  "financial summary",
+  "at a glance",
+  "ten year",
+  "10 year",
+  "ten-year",
+  "five year",
+  "5 year",
+  "five-year",
+  "key financial indicators",
+  "historical financial",
+];
+
 function scorePage(text: string) {
   const haystack = text.toLowerCase();
   let score = 0;
+  let strong = 0;
 
   for (const marker of STRONG_MARKERS) {
-    if (haystack.includes(marker)) score += 3;
+    if (haystack.includes(marker)) {
+      score += 3;
+      strong += 1;
+    }
   }
   for (const marker of SUPPORTING_MARKERS) {
     if (haystack.includes(marker)) score += 1;
+  }
+
+  // A page that announces itself as a summary and carries no statement heading
+  // is a summary. Vetoed rather than merely penalised: including it costs
+  // accuracy, and the statements themselves are found elsewhere anyway.
+  if (strong === 0 && SUMMARY_MARKERS.some((marker) => haystack.includes(marker))) {
+    return 0;
   }
 
   return score;
