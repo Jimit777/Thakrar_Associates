@@ -1,78 +1,67 @@
-"use client";
-
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { generatePeers } from "@/app/(app)/analyzer/peers";
-import type { ComputedFigures } from "@/lib/comparison";
+import {
+  fetchPerformance,
+  fetchSymbolPerformance,
+  PERFORMANCE_WINDOWS,
+  type Performance,
+} from "@/lib/prices";
+import { PeerRefreshButton } from "@/components/peer-refresh-button";
+import { Skeleton } from "@/components/skeleton";
 import type { Peers } from "@/lib/peers-schema";
 
-function formatWhen(iso: string) {
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeZone: "Asia/Kolkata",
-  }).format(new Date(iso));
+const rupees = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
+
+function signed(value: number | null) {
+  if (value === null) return <span className="text-muted">—</span>;
+  return (
+    <span className={value >= 0 ? "text-positive" : "text-negative"}>
+      {value >= 0 ? "+" : ""}
+      {value.toFixed(1)}%
+    </span>
+  );
 }
 
-/** A blank means the figure wasn't disclosed, not that it is zero. */
-const show = (value: string | undefined) =>
-  !value || value.trim() === "" ? "—" : value;
-
-export function PeerComparison({
+/**
+ * Peers compared on market performance rather than on fundamentals.
+ *
+ * Fundamentals meant reading a web page per company: slow, expensive, and the
+ * table still came back with holes because half of what an industry is judged
+ * on isn't on the page you land on. Every column here is computed from the
+ * price feed instead — one request per company, exact, and free. The model is
+ * only asked which companies belong in the table.
+ *
+ * What this deliberately doesn't claim to be: a valuation comparison. It shows
+ * how the market has treated these companies, not which is the better business.
+ */
+export async function PeerComparison({
   stockId,
   symbol,
   peers,
-  own,
-  generatedAt,
 }: {
   stockId: string;
   symbol: string;
   peers: Peers | null;
-  /** Figures the app worked out from confirmed filings, which override the web. */
-  own: ComputedFigures | null;
-  generatedAt: string | null;
 }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const named = (peers?.peers ?? []).filter((peer) => peer.symbol.trim() !== "");
 
-  function run() {
-    setError(null);
-    startTransition(async () => {
-      const result = await generatePeers(stockId);
-      if (result.error) setError(result.error);
-      else router.refresh();
-    });
+  // Every company at once — this is the whole latency budget of the panel.
+  const [own, ...fetched] = await Promise.all([
+    fetchSymbolPerformance(symbol),
+    ...named.map((peer) => fetchPerformance(`${peer.symbol.trim()}.NS`)),
+  ]);
+
+  const rows: { label: string; note: string; isSubject: boolean; data: Performance }[] =
+    [];
+
+  if (own) {
+    rows.push({ label: symbol, note: "this company", isSubject: true, data: own });
   }
 
-  // Columns come from the model, chosen for the industry rather than fixed.
-  const metrics = peers?.metrics ?? [];
-
-  const rows = (peers?.companies ?? []).map((company) => {
-    const found = new Map(
-      company.values.map((entry) => [entry.metric, entry.value]),
-    );
-
-    // For the subject company a verified figure beats a published one, so
-    // anything the app can compute replaces what was found on the web.
-    const cells = metrics.map((metric) => {
-      const computed = company.is_subject
-        ? own?.values.get(metric.label)
-        : undefined;
-
-      return {
-        label: metric.label,
-        value: computed ?? found.get(metric.label) ?? "",
-        confirmed: computed !== undefined,
-      };
-    });
-
-    return { company, cells };
+  named.forEach((peer, index) => {
+    const data = fetched[index];
+    if (data) rows.push({ label: peer.name, note: peer.why, isSubject: false, data });
   });
 
-  // The subject first — it is the one every other row is being read against.
-  rows.sort((a, b) => Number(b.company.is_subject) - Number(a.company.is_subject));
-
-  const anyConfirmed = rows.some((row) => row.cells.some((cell) => cell.confirmed));
+  const unresolved = named.length - fetched.filter(Boolean).length;
 
   return (
     <section className="rounded-lg border border-border bg-surface p-4 sm:p-5">
@@ -80,143 +69,137 @@ export function PeerComparison({
         <div>
           <h2 className="text-base font-medium">Against its peers</h2>
           <p className="mt-0.5 text-xs text-muted">
-            {generatedAt
-              ? `Compared on what this industry is judged by · ${formatWhen(generatedAt)}`
-              : "How the figures compare with listed competitors."}
+            How the market has treated them — prices, not fundamentals
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={run}
-          disabled={pending}
-          className="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
-        >
-          {pending ? "Researching…" : peers ? "Refresh" : "Find peers"}
-        </button>
+        <PeerRefreshButton stockId={stockId} hasPeers={peers !== null} />
       </div>
 
-      {error && <p className="mt-3 text-sm text-negative">{error}</p>}
-
-      {peers && (metrics.length === 0 || rows.length === 0) ? (
-        // A comparison saved before the columns became industry-specific. It
-        // can't be rendered in the new shape, and re-reading it costs nothing
-        // the reader hasn't already paid for.
+      {!peers ? (
         <p className="mt-4 text-sm text-muted">
-          This comparison was built before the columns were chosen per industry.
-          Press Refresh to rebuild it.
-        </p>
-      ) : !peers ? (
-        <p className="mt-4 text-sm text-muted">
-          Finds listed Indian competitors and compares them on the measures this
-          industry actually uses — a lender on assets and bad loans, a
-          manufacturer on margins and capacity. {symbol}&apos;s own figures come
-          from what you confirmed wherever the app can work them out.
+          Names the companies {symbol} genuinely competes with, then compares
+          them on price performance. The comparison itself is drawn from the
+          price feed, so it costs nothing and updates every time you open this
+          page.
         </p>
       ) : (
         <>
           <p className="mt-4 text-sm leading-relaxed">{peers.basis}</p>
 
-          {metrics.length > 3 && (
-            <p className="mt-3 text-xs text-muted md:hidden">
-              Swipe the table sideways to see every column.
+          {rows.length === 0 ? (
+            <p className="mt-3 text-sm text-muted">
+              None of the tickers resolved against the price feed. Press Change
+              peers to try again.
             </p>
-          )}
+          ) : (
+            <>
+              <p className="mt-3 text-xs text-muted md:hidden">
+                Swipe the table sideways to see every column.
+              </p>
 
-          <div className="scroll-x mt-3 rounded-lg border border-border">
-            <table className="w-full min-w-3xl border-collapse">
-              <thead>
-                <tr className="border-b border-border bg-surface-sunken text-left">
-                  <th className="stat-label px-4 py-3">Company</th>
-                  {metrics.map((metric) => (
-                    <th
-                      key={metric.label}
-                      className="stat-label px-4 py-3 text-right"
-                    >
-                      {metric.label}
-                      {metric.note && (
+              <div className="scroll-x mt-3 rounded-lg border border-border">
+                <table className="w-full min-w-3xl border-collapse">
+                  <thead>
+                    <tr className="border-b border-border bg-surface-sunken text-left">
+                      <th className="stat-label px-4 py-3">Company</th>
+                      <th className="stat-label px-4 py-3 text-right">Price</th>
+                      {PERFORMANCE_WINDOWS.map(([label]) => (
+                        <th key={label} className="stat-label px-4 py-3 text-right">
+                          {label}
+                        </th>
+                      ))}
+                      <th className="stat-label px-4 py-3 text-right">
+                        52-week range
                         <span className="mt-0.5 block font-normal normal-case tracking-normal text-muted">
-                          {metric.note}
+                          where it sits
                         </span>
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
+                      </th>
+                    </tr>
+                  </thead>
 
-              <tbody>
-                {rows.map(({ company, cells }) => (
-                  <tr
-                    key={`${company.name}-${company.symbol}`}
-                    className={`border-b border-border last:border-0 ${
-                      company.is_subject ? "bg-accent-tint" : ""
-                    }`}
-                  >
-                    <td className="px-4 py-3 text-sm">
-                      <span className="font-medium">
-                        {company.is_subject ? symbol : company.name}
-                      </span>
-                      <span className="mt-0.5 block text-xs text-muted">
-                        {[
-                          company.is_subject ? null : company.symbol,
-                          own && company.is_subject ? own.period : company.period,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                        {company.source_url && !company.is_subject && (
-                          <>
-                            {" · "}
-                            <a
-                              href={company.source_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-accent underline underline-offset-2"
-                            >
-                              {company.source_label || "source"}
-                            </a>
-                          </>
-                        )}
-                      </span>
-                    </td>
-
-                    {cells.map((cell) => (
-                      <td
-                        key={cell.label}
-                        className="figure px-4 py-3 text-right text-sm"
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr
+                        key={row.data.ticker}
+                        className={`border-b border-border last:border-0 ${
+                          row.isSubject ? "bg-accent-tint" : ""
+                        }`}
                       >
-                        {show(cell.value)}
-                        {cell.confirmed && (
-                          <span
-                            className="ml-0.5 text-accent"
-                            title="From figures you confirmed, not from the web"
-                          >
-                            *
+                        <td className="max-w-xs px-4 py-3 text-sm">
+                          <span className="font-medium">{row.label}</span>
+                          <span className="mt-0.5 block text-xs leading-snug text-muted">
+                            {row.note}
                           </span>
-                        )}
-                      </td>
+                        </td>
+
+                        <td className="figure px-4 py-3 text-right text-sm">
+                          {rupees.format(row.data.price)}
+                          {row.data.dayChange !== null && (
+                            <span className="mt-0.5 block text-xs">
+                              {signed(row.data.dayChange)}
+                            </span>
+                          )}
+                        </td>
+
+                        {PERFORMANCE_WINDOWS.map(([label]) => (
+                          <td
+                            key={label}
+                            className="figure px-4 py-3 text-right text-sm"
+                          >
+                            {signed(row.data.returns[label] ?? null)}
+                          </td>
+                        ))}
+
+                        <td className="px-4 py-3 text-right">
+                          {row.data.rangePosition === null ? (
+                            <span className="text-sm text-muted">—</span>
+                          ) : (
+                            <>
+                              {/* A bar reads faster than a percentage for
+                                  "near its high" versus "near its low". */}
+                              <div className="ml-auto h-1.5 w-24 overflow-hidden rounded-full bg-surface-sunken">
+                                <div
+                                  className="h-full rounded-full bg-accent"
+                                  style={{ width: `${row.data.rangePosition}%` }}
+                                />
+                              </div>
+                              <span className="figure mt-1 block text-xs text-muted">
+                                {rupees.format(row.data.low52 ?? 0)} –{" "}
+                                {rupees.format(row.data.high52 ?? 0)}
+                              </span>
+                            </>
+                          )}
+                        </td>
+                      </tr>
                     ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  </tbody>
+                </table>
+              </div>
 
-          {peers.caveat && (
-            <p className="mt-3 text-xs text-muted">{peers.caveat}</p>
+              <p className="mt-3 text-xs text-muted">
+                Prices from Yahoo, delayed. Returns are price only — dividends
+                are not counted, so a high-yielding company looks worse here than
+                it was. This compares how the market has treated these
+                companies, not how the businesses have performed.
+                {unresolved > 0 &&
+                  ` ${unresolved} suggested peer${unresolved === 1 ? "" : "s"} did not resolve against the price feed and ${unresolved === 1 ? "is" : "are"} left out.`}
+              </p>
+            </>
           )}
-
-          <p className="mt-2 text-xs text-muted">
-            {anyConfirmed && (
-              <>
-                * worked out from figures you confirmed. Everything else was read
-                off the web and may cover a different period —{" "}
-              </>
-            )}
-            {!anyConfirmed && "Every figure here was read off the web — "}
-            follow a source link before relying on one.
-          </p>
         </>
       )}
+    </section>
+  );
+}
+
+/** Holds the panel's space while the peer prices are in flight. */
+export function PeerComparisonSkeleton() {
+  return (
+    <section className="rounded-lg border border-border bg-surface p-4 sm:p-5">
+      <Skeleton className="h-4 w-36" />
+      <Skeleton className="mt-2 h-3 w-64 max-w-full" />
+      <Skeleton className="mt-4 h-40 w-full" />
     </section>
   );
 }

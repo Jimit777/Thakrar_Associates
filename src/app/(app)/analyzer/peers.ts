@@ -5,20 +5,20 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { PeersSchema, PEERS_PROMPT } from "@/lib/peers-schema";
-import { BRIEFING_MODEL } from "@/lib/models";
+import { KEY_POINTS_MODEL } from "@/lib/models";
 
 export type PeersResult = { error?: string; ok?: boolean };
 
 /**
- * Finds listed competitors and their headline figures, and caches them.
+ * Names the listed competitors, and nothing else.
  *
- * The chat could always answer this, but it paid for the research on every
- * question and threw the result away. Cached and refreshed on demand, the cost
- * is once per stock instead of once per asking.
+ * Their figures used to come from here too, which meant ten searches and a
+ * minute of waiting to produce a table with holes in it. The measurable part
+ * now comes from the price feed instead — one request per company, exact, and
+ * free — so this call shrank to a short list of names and tickers.
  *
- * Sonnet rather than Haiku: reading someone else's financial figures off a page
- * and attributing them to the right period is where a small model goes wrong
- * quietly, and a wrong number in a comparison table is worse than no table.
+ * Haiku is enough for that, and the peer list changes rarely, so it is cached
+ * and only rebuilt when asked.
  */
 export async function generatePeers(stockId: string): Promise<PeersResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -47,21 +47,24 @@ export async function generatePeers(stockId: string): Promise<PeersResult> {
 
   try {
     const message = await client.messages.create({
-      model: BRIEFING_MODEL,
-      max_tokens: 8000,
-      output_config: {
-        effort: "medium",
-        format: zodOutputFormat(PeersSchema),
-      },
+      model: KEY_POINTS_MODEL,
+      // A list of names and tickers is a short answer. Haiku takes no effort
+      // parameter, and the ceiling is what keeps this quick.
+      max_tokens: 2000,
+      output_config: { format: zodOutputFormat(PeersSchema) },
       system: PEERS_PROMPT,
-      // Six metrics across four peers is two dozen figures. Four searches left
-      // the table full of blanks; the budget is now one search to name the
-      // peers and roughly two per peer to fill their rows.
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 10 }],
+      tools: [
+        {
+          type: "web_search_20260209",
+          name: "web_search",
+          max_uses: 3,
+          allowed_callers: ["direct"],
+        },
+      ],
       messages: [
         {
           role: "user",
-          content: `Find the listed Indian peers of ${stock.symbol}${stock.name ? ` (${stock.name})` : ""}${stock.sector ? `, which operates in ${stock.sector}` : ""}, and their headline figures.`,
+          content: `Name the listed Indian companies that ${stock.symbol}${stock.name ? ` (${stock.name})` : ""}${stock.sector ? `, which operates in ${stock.sector}` : ""} genuinely competes with.`,
         },
       ],
     });

@@ -265,6 +265,132 @@ export async function fetchPriceSummary(
   };
 }
 
+export type Performance = {
+  ticker: string;
+  name: string | null;
+  price: number;
+  /** Move since the previous close, in per cent. */
+  dayChange: number | null;
+  /** Return over each window, null where listing history is too short. */
+  returns: Record<string, number | null>;
+  high52: number | null;
+  low52: number | null;
+  /** Where the price sits between the 52-week low and high, 0 to 100. */
+  rangePosition: number | null;
+};
+
+export const PERFORMANCE_WINDOWS: [string, number][] = [
+  ["1M", 30],
+  ["6M", 182],
+  ["1Y", 365],
+  ["3Y", 1095],
+];
+
+/**
+ * Everything about a company that can be had free, deterministically, in one
+ * request: price, how it has moved, and where it sits in its year's range.
+ *
+ * This exists because peer comparison on *fundamentals* means reading a web
+ * page per company — slow, expensive, and full of holes. Comparing on market
+ * performance costs one Yahoo call each and every cell is exact.
+ */
+export async function fetchPerformance(
+  ticker: string,
+): Promise<Performance | null> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+    ticker,
+  )}?range=5y&interval=1d`;
+
+  try {
+    const response = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!response.ok) return null;
+
+    const json = await response.json();
+    const result = json?.chart?.result?.[0];
+    const meta = result?.meta;
+    const timestamps: number[] | undefined = result?.timestamp;
+    const closes: (number | null)[] | undefined =
+      result?.indicators?.quote?.[0]?.close;
+
+    const price = meta?.regularMarketPrice;
+    if (typeof price !== "number" || !Number.isFinite(price)) return null;
+
+    const points: PricePoint[] = [];
+    (timestamps ?? []).forEach((seconds, index) => {
+      const close = closes?.[index];
+      if (typeof close === "number" && Number.isFinite(close)) {
+        points.push({
+          date: new Date(seconds * 1000).toISOString().slice(0, 10),
+          close,
+        });
+      }
+    });
+
+    const latest = points.at(-1);
+    const returns: Record<string, number | null> = {};
+
+    for (const [label, days] of PERFORMANCE_WINDOWS) {
+      if (!latest) {
+        returns[label] = null;
+        continue;
+      }
+
+      const cutoff = new Date(latest.date).getTime() - days * 86_400_000;
+      const past = points.find(
+        (point) => new Date(point.date).getTime() >= cutoff,
+      );
+
+      // Don't report a three-year return from one year of listing history.
+      const covered = past
+        ? (new Date(latest.date).getTime() - new Date(past.date).getTime()) /
+          86_400_000
+        : 0;
+
+      returns[label] =
+        past && past !== latest && past.close !== 0 && covered >= days * 0.7
+          ? ((latest.close - past.close) / past.close) * 100
+          : null;
+    }
+
+    const high52 =
+      typeof meta.fiftyTwoWeekHigh === "number" ? meta.fiftyTwoWeekHigh : null;
+    const low52 =
+      typeof meta.fiftyTwoWeekLow === "number" ? meta.fiftyTwoWeekLow : null;
+    const previous =
+      typeof meta.chartPreviousClose === "number" ? meta.chartPreviousClose : null;
+
+    return {
+      ticker: meta.symbol ?? ticker,
+      name: meta.longName ?? meta.shortName ?? null,
+      price,
+      dayChange:
+        previous && previous !== 0 ? ((price - previous) / previous) * 100 : null,
+      returns,
+      high52,
+      low52,
+      rangePosition:
+        high52 !== null && low52 !== null && high52 > low52
+          ? ((price - low52) / (high52 - low52)) * 100
+          : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** As above, but for a bare symbol — tries NSE, then BSE. */
+export async function fetchSymbolPerformance(symbol: string) {
+  return (
+    (await fetchPerformance(`${symbol}.NS`)) ??
+    (await fetchPerformance(`${symbol}.BO`))
+  );
+}
+
 /**
  * Looks up several stocks at once, a few at a time so we don't fire off
  * dozens of simultaneous requests.

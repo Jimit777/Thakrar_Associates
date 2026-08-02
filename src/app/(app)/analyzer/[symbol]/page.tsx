@@ -21,6 +21,10 @@ import type { ConcallSummary } from "@/lib/concall-schema";
 import { SavedFinancials } from "@/components/saved-financials";
 import { SegmentMix } from "@/components/segment-mix";
 import {
+  PeerComparison,
+  PeerComparisonSkeleton,
+} from "@/components/peer-comparison";
+import {
   PriceAndValuation,
   PriceAndValuationSkeleton,
 } from "@/components/price-and-valuation";
@@ -53,63 +57,42 @@ export default async function StockPage({
 
   if (!stock || !user) notFound();
 
-  const { data } = await supabase
-    .from("documents")
-    .select(
-      "id, stock_id, kind, period_label, storage_path, file_name, file_size_bytes, created_at",
-    )
-    .eq("stock_id", stock.id)
-    .order("created_at", { ascending: false });
-
-  const documents = (data ?? []) as StockDocument[];
-
-  const { data: financialsData } = await supabase
-    .from("financials")
-    .select(
-      "id, period_type, period_label, basis, currency_unit, source_document_id, data",
-    )
-    .eq("stock_id", stock.id)
-    .order("period_label");
-
-  const { data: chatData } = await supabase
-    .from("chat_messages")
-    .select("role, content")
-    .eq("stock_id", stock.id)
-    .order("created_at");
-
-  const chatMessages = (chatData ?? []) as ChatMessage[];
-
-  const { data: concallRows } = await supabase
-    .from("concall_summaries")
-    .select("document_id, content, generated_at")
-    .eq("stock_id", stock.id);
-
-  const summaryByDocument = new Map(
-    (concallRows ?? []).map((row) => [
-      row.document_id as string,
-      row as { content: unknown; generated_at: string },
-    ]),
-  );
-
-  const concallEntries: ConcallEntry[] = documents
-    .filter((doc) => doc.kind === "concall")
-    .map((doc) => {
-      const saved = summaryByDocument.get(doc.id);
-      return {
-        documentId: doc.id,
-        periodLabel: doc.period_label,
-        fileName: doc.file_name,
-        summary: (saved?.content as ConcallSummary | undefined) ?? null,
-        generatedAt: saved?.generated_at ?? null,
-      };
-    });
-
+  // Every query at once. These used to run one after another, so the page paid
+  // eight round trips to Supabase before it could render anything — none of
+  // them depend on each other beyond needing the stock's id.
   const [
+    { data },
+    { data: financialsData },
+    { data: chatData },
+    { data: concallRows },
     { data: insightsRow },
     { data: keyPointsRow },
     { data: peersRow },
     { data: promisesRow },
   ] = await Promise.all([
+    supabase
+      .from("documents")
+      .select(
+        "id, stock_id, kind, period_label, storage_path, file_name, file_size_bytes, created_at",
+      )
+      .eq("stock_id", stock.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("financials")
+      .select(
+        "id, period_type, period_label, basis, currency_unit, source_document_id, data",
+      )
+      .eq("stock_id", stock.id)
+      .order("period_label"),
+    supabase
+      .from("chat_messages")
+      .select("role, content")
+      .eq("stock_id", stock.id)
+      .order("created_at"),
+    supabase
+      .from("concall_summaries")
+      .select("document_id, content, generated_at")
+      .eq("stock_id", stock.id),
     supabase
       .from("stock_insights")
       .select("content, generated_at, periods_used")
@@ -139,6 +122,29 @@ export default async function StockPage({
         calls_used: number;
       }>(),
   ]);
+
+  const documents = (data ?? []) as StockDocument[];
+  const chatMessages = (chatData ?? []) as ChatMessage[];
+
+  const summaryByDocument = new Map(
+    (concallRows ?? []).map((row) => [
+      row.document_id as string,
+      row as { content: unknown; generated_at: string },
+    ]),
+  );
+
+  const concallEntries: ConcallEntry[] = documents
+    .filter((doc) => doc.kind === "concall")
+    .map((doc) => {
+      const saved = summaryByDocument.get(doc.id);
+      return {
+        documentId: doc.id,
+        periodLabel: doc.period_label,
+        fileName: doc.file_name,
+        summary: (saved?.content as ConcallSummary | undefined) ?? null,
+        generatedAt: saved?.generated_at ?? null,
+      };
+    });
 
   // Sorted by real chronology, not by label text — otherwise Q1 FY2026 lands
   // before Q2 FY2025.
@@ -199,11 +205,18 @@ export default async function StockPage({
 
                 <Suspense fallback={<PriceAndValuationSkeleton />}>
                   <PriceAndValuation
-                    stockId={stock.id}
                     symbol={stock.symbol}
                     financials={financials}
+                  />
+                </Suspense>
+
+                {/* Its own boundary: the peer prices are a separate set of
+                    requests, and nothing above should wait on them. */}
+                <Suspense fallback={<PeerComparisonSkeleton />}>
+                  <PeerComparison
+                    stockId={stock.id}
+                    symbol={stock.symbol}
                     peers={(peersRow?.content as Peers | null) ?? null}
-                    peersGeneratedAt={peersRow?.generated_at ?? null}
                   />
                 </Suspense>
 
