@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { deleteFinancialRow } from "@/app/(app)/analyzer/extract";
 import { SECTIONS } from "@/lib/extraction-schema";
-import { computeRatios, operatingProfit, RATIOS } from "@/lib/ratios";
+import { computeRatios, growthSeries, operatingProfit, RATIOS } from "@/lib/ratios";
 import { FinancialCharts } from "@/components/financial-charts";
 import type { FinancialRow } from "@/types/financial";
 
@@ -236,6 +236,46 @@ export function SavedFinancials({ rows }: { rows: FinancialRow[] }) {
                           );
                         })}
                     </React.Fragment>
+                  );
+                })}
+
+                <tr className="bg-surface-sunken">
+                  <td colSpan={visible.length + 1} className="stat-label px-4 py-2">
+                    Growth on the period before · calculated
+                  </td>
+                </tr>
+
+                {(
+                  [
+                    ["revenue", "Revenue growth"],
+                    ["net_profit", "Net profit growth"],
+                  ] as const
+                ).map(([key, label]) => {
+                  const series = growthSeries(visible, key);
+
+                  return (
+                    <tr
+                      key={key}
+                      className="border-b border-border last:border-0"
+                    >
+                      <td className="px-4 py-2 text-sm">{label}</td>
+                      {series.map((entry, index) => (
+                        <td
+                          key={visible[index].id}
+                          className={`figure px-4 py-2 text-right text-sm ${
+                            entry.growth === null
+                              ? ""
+                              : entry.growth >= 0
+                                ? "text-positive"
+                                : "text-negative"
+                          }`}
+                        >
+                          {entry.growth === null
+                            ? "—"
+                            : `${entry.growth >= 0 ? "+" : ""}${entry.growth.toFixed(1)}%`}
+                        </td>
+                      ))}
+                    </tr>
                   );
                 })}
 

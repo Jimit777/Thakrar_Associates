@@ -7,13 +7,21 @@ import type { Stock } from "@/types/stock";
 export default async function AnalyzerPage() {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("stocks")
-    .select("id, symbol, name, sector, documents(count)")
-    .order("symbol");
+  const [{ data, error }, { data: holdings }] = await Promise.all([
+    supabase
+      .from("stocks")
+      .select("id, symbol, name, sector, documents(count)")
+      .order("symbol"),
+    supabase.from("holdings").select("symbol"),
+  ]);
 
   type Row = Stock & { documents: { count: number }[] };
   const stocks = (data ?? []) as Row[];
+
+  // Which of these you actually own. The two lists have always been separate —
+  // stocks are what you research, holdings are what you hold — but nothing on
+  // this page said which was which.
+  const held = new Set((holdings ?? []).map((row) => row.symbol as string));
 
   return (
     <>
@@ -43,7 +51,18 @@ export default async function AnalyzerPage() {
                   href={`/analyzer/${stock.symbol}`}
                   className="rounded-lg border border-border bg-surface p-4 sm:p-5 transition-colors hover:border-accent"
                 >
-                  <h2 className="text-lg font-medium">{stock.symbol}</h2>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-lg font-medium">{stock.symbol}</h2>
+                    {held.has(stock.symbol) ? (
+                      <span className="rounded-full border border-accent/40 bg-accent-tint px-2 py-0.5 text-[11px] text-accent">
+                        Held
+                      </span>
+                    ) : (
+                      <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted">
+                        Watching
+                      </span>
+                    )}
+                  </div>
                   {stock.name && (
                     <p className="mt-1 text-sm text-muted">{stock.name}</p>
                   )}

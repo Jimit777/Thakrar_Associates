@@ -19,6 +19,7 @@ type HoldingRow = {
   quantity: number;
   avg_price: number;
   last_price: number | null;
+  previous_close: number | null;
   last_refreshed_at: string | null;
 };
 
@@ -71,7 +72,7 @@ export default async function DashboardPage() {
   ] = await Promise.all([
     supabase
       .from("holdings")
-      .select("symbol, quantity, avg_price, last_price, last_refreshed_at"),
+      .select("symbol, quantity, avg_price, last_price, previous_close, last_refreshed_at"),
     supabase.from("stocks").select("id, symbol, sector"),
     supabase
       .from("documents")
@@ -85,8 +86,25 @@ export default async function DashboardPage() {
     quantity: Number(row.quantity),
     avg_price: Number(row.avg_price),
     last_price: row.last_price === null ? null : Number(row.last_price),
+    previous_close:
+      row.previous_close === null ? null : Number(row.previous_close),
     last_refreshed_at: row.last_refreshed_at as string | null,
   }));
+
+  // Today's move, which the since-you-bought totals hide entirely.
+  const dayBase = holdings.reduce(
+    (sum, h) =>
+      h.previous_close === null ? sum : sum + h.quantity * h.previous_close,
+    0,
+  );
+  const dayAmount = holdings.reduce(
+    (sum, h) =>
+      h.previous_close === null || h.last_price === null
+        ? sum
+        : sum + h.quantity * (h.last_price - h.previous_close),
+    0,
+  );
+  const dayPercent = dayBase === 0 ? null : (dayAmount / dayBase) * 100;
 
   const invested = holdings.reduce(
     (sum, h) => sum + h.quantity * h.avg_price,
@@ -190,15 +208,27 @@ export default async function DashboardPage() {
                   : undefined
               }
             />
-            <Tile
-              label="Holdings"
-              value={String(holdings.length)}
-              note={
-                priced.length < holdings.length
-                  ? `${holdings.length - priced.length} unpriced`
-                  : undefined
-              }
-            />
+            {/* Today's move replaces the holdings count once prices carry a
+                previous close: what changed today is the more useful figure,
+                and the count is on the portfolio page anyway. */}
+            {dayPercent === null ? (
+              <Tile
+                label="Holdings"
+                value={String(holdings.length)}
+                note={
+                  priced.length < holdings.length
+                    ? `${holdings.length - priced.length} unpriced`
+                    : undefined
+                }
+              />
+            ) : (
+              <Tile
+                label="Today"
+                value={formatCurrency(dayAmount)}
+                note={formatPercent(dayPercent)}
+                tone={dayAmount >= 0 ? "positive" : "negative"}
+              />
+            )}
           </section>
 
           <div className="mt-6 grid gap-6 lg:grid-cols-2">

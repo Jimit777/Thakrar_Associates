@@ -5,13 +5,12 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
-  NewsDigestSchema,
-  NEWS_PROMPT,
   NewsSearchSchema,
   NEWS_SEARCH_PROMPT,
   type NewsSearchResults,
 } from "@/lib/news-schema";
 import { BRIEFING_MODEL } from "@/lib/models";
+import { buildDigest } from "@/lib/digest";
 
 export type NewsResult = { error?: string; ok?: boolean };
 
@@ -74,101 +73,19 @@ export async function searchNews(query: string): Promise<SearchResult> {
 }
 
 /**
- * Builds one digest covering the whole portfolio, grouped by sector. Cached —
- * it costs a search-backed model call, so it runs only when asked.
+ * Rebuilds the signed-in user's digest on demand. The work itself lives in
+ * lib/digest so the nightly cron can run exactly the same code.
  */
 export async function generateNewsDigest(): Promise<NewsResult> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set on the server." };
-
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are signed out. Refresh and sign in again." };
 
-  // Holdings only. This is a daily feed of what bears on money actually at
-  // risk — stocks merely being researched would dilute it.
-  const [{ data: holdings }, { data: stocks }] = await Promise.all([
-    supabase.from("holdings").select("symbol"),
-    supabase.from("stocks").select("symbol, sector"),
-  ]);
+  const result = await buildDigest(supabase, user.id);
+  if (result.error) return { error: result.error };
 
-  // Sectors the user has already recorded in the analyzer are reused rather
-  // than guessed at again.
-  const sectorBySymbol = new Map(
-    (stocks ?? [])
-      .filter((row) => row.sector)
-      .map((row) => [row.symbol as string, row.sector as string]),
-  );
-
-  const symbols = [
-    ...new Set((holdings ?? []).map((row) => row.symbol as string)),
-  ].sort();
-
-  if (symbols.length === 0) {
-    return { error: "Add a holding to your portfolio first." };
-  }
-
-  const roster = symbols
-    .map((symbol) => {
-      const sector = sectorBySymbol.get(symbol);
-      return `- ${symbol}${sector ? ` (sector: ${sector})` : ""}`;
-    })
-    .join("\n");
-
-  const client = new Anthropic({ apiKey });
-
-  try {
-    const stream = client.messages.stream({
-      model: BRIEFING_MODEL,
-      max_tokens: 8000,
-      output_config: {
-        effort: "medium",
-        format: zodOutputFormat(NewsDigestSchema),
-      },
-      system: NEWS_PROMPT,
-      // Each search pulls page content into the input, so this cap is the main
-      // lever on what a digest costs.
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 6 }],
-      messages: [
-        {
-          role: "user",
-          content: `These are the Indian listed stocks held in the portfolio. Group them by sector and build the digest.\n\n${roster}\n\nToday is ${new Date().toISOString().slice(0, 10)}. Cover roughly the last week — this is read daily, so older items will already have been seen.`,
-        },
-      ],
-    });
-
-    const message = await stream.finalMessage();
-
-    if (message.stop_reason === "refusal") {
-      return { error: "Claude declined to build this digest." };
-    }
-
-    const textBlock = message.content.find((block) => block.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
-      return { error: "No digest came back. Try again." };
-    }
-
-    const content = NewsDigestSchema.parse(JSON.parse(textBlock.text));
-
-    const { error } = await supabase.from("news_digests").upsert(
-      {
-        user_id: user.id,
-        content,
-        symbols,
-        generated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" },
-    );
-
-    if (error) return { error: error.message };
-
-    revalidatePath("/news");
-    return { ok: true };
-  } catch (cause) {
-    return {
-      error: cause instanceof Error ? cause.message : "Couldn't build the digest.",
-    };
-  }
+  revalidatePath("/news");
+  return { ok: true };
 }

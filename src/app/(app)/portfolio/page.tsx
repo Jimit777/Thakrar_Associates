@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import {
   currentValue,
+  dayMove,
   investedValue,
   portfolioXirr,
   type Holding,
@@ -22,7 +23,7 @@ export default async function PortfolioPage() {
   const { data, error } = await supabase
     .from("holdings")
     .select(
-      "id, symbol, exchange, quantity, avg_price, buy_date, thesis, last_price, last_refreshed_at",
+      "id, symbol, exchange, quantity, avg_price, buy_date, thesis, last_price, previous_close, last_refreshed_at",
     )
     .order("symbol");
 
@@ -32,6 +33,8 @@ export default async function PortfolioPage() {
     quantity: Number(row.quantity),
     avg_price: Number(row.avg_price),
     last_price: row.last_price === null ? null : Number(row.last_price),
+    previous_close:
+      row.previous_close === null ? null : Number(row.previous_close),
   }));
 
   const totalInvested = holdings.reduce(
@@ -57,6 +60,16 @@ export default async function PortfolioPage() {
   // Annualised return, which a total percentage can't give you: 40% over ten
   // months and 40% over eight years are not the same result.
   const annualised = portfolioXirr(holdings, currentTime());
+
+  // Today's move across the portfolio, which the since-you-bought figures hide.
+  const moves = holdings.map(dayMove).filter((move) => move !== null);
+  const dayAmount = moves.reduce((sum, move) => sum + move.amount, 0);
+  const dayBase = holdings.reduce(
+    (sum, h) =>
+      h.previous_close === null ? sum : sum + h.quantity * h.previous_close,
+    0,
+  );
+  const dayPercent = dayBase === 0 ? null : (dayAmount / dayBase) * 100;
 
   const lastRefreshedAt =
     holdings
@@ -105,6 +118,18 @@ export default async function PortfolioPage() {
                 </span>
                 {priced.length > 0 && (
                   <>
+                    {dayPercent !== null && (
+                      <span>
+                        Today{" "}
+                        <span
+                          className={`figure ${
+                            dayAmount >= 0 ? "text-positive" : "text-negative"
+                          }`}
+                        >
+                          {formatCurrency(dayAmount)} ({formatPercent(dayPercent)})
+                        </span>
+                      </span>
+                    )}
                     <span>
                       Value{" "}
                       <span className="figure text-foreground">

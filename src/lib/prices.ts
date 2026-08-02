@@ -4,6 +4,8 @@ export type Quote = {
   price: number;
   currency: string;
   name: string | null;
+  /** Previous session's close — arrives in the same response, so it is free. */
+  previousClose: number | null;
 };
 
 /**
@@ -48,6 +50,10 @@ export async function fetchQuote(
       price,
       currency: meta.currency ?? "INR",
       name: meta.shortName ?? meta.longName ?? null,
+      previousClose:
+        typeof meta.chartPreviousClose === "number"
+          ? meta.chartPreviousClose
+          : null,
     };
   } catch {
     // Network error, timeout, or unexpected response shape.

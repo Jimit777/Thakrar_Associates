@@ -11,6 +11,7 @@ import { formatHoldingPeriod } from "@/lib/xirr";
 import {
   annualisedReturn,
   currentValue,
+  dayMove,
   investedValue,
   profitAndLoss,
   type Holding,
@@ -134,6 +135,7 @@ function DisplayCard({
   const value = currentValue(holding);
   const pnl = profitAndLoss(holding);
   const annualised = annualisedReturn(holding, now);
+  const move = dayMove(holding);
 
   return (
     <div className="rounded-lg border border-border bg-surface p-4">
@@ -173,7 +175,9 @@ function DisplayCard({
               "Price",
               holding.last_price === null
                 ? "—"
-                : formatCurrency(holding.last_price),
+                : `${formatCurrency(holding.last_price)}${
+                    move === null ? "" : `  ${formatPercent(move.percent)}`
+                  }`,
             ],
             ["Value", value === null ? "—" : formatCurrency(value)],
           ] as const
@@ -366,7 +370,19 @@ function DisplayRow({
         {holding.last_price === null ? (
           <span className="text-muted">—</span>
         ) : (
-          formatCurrency(holding.last_price)
+          <>
+            <div>{formatCurrency(holding.last_price)}</div>
+            {/* Today's move sits under the price, where a reader looks for it —
+                separate from the since-you-bought figures on the right. */}
+            {(() => {
+              const move = dayMove(holding);
+              return move === null ? null : (
+                <div className={`text-xs ${pnlColour(move.amount)}`}>
+                  {formatPercent(move.percent)}
+                </div>
+              );
+            })()}
+          </>
         )}
       </td>
       <td className={`${cellClass} figure text-right`}>

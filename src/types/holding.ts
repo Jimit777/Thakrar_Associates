@@ -11,8 +11,28 @@ export type Holding = {
   buy_date: string | null;
   thesis: string | null;
   last_price: number | null;
+  previous_close: number | null;
   last_refreshed_at: string | null;
 };
+
+/**
+ * Today's move for one holding, in rupees and per cent.
+ *
+ * Separate from profit and loss on purpose: one is what the position has done
+ * since you bought it, the other is what it did since yesterday, and reading
+ * either as the other is the most common way to misjudge a portfolio.
+ */
+export function dayMove(holding: Holding) {
+  if (holding.last_price === null || holding.previous_close === null) return null;
+  if (holding.previous_close === 0) return null;
+
+  const perShare = holding.last_price - holding.previous_close;
+
+  return {
+    amount: perShare * holding.quantity,
+    percent: (perShare / holding.previous_close) * 100,
+  };
+}
 
 /** What the user paid in total for a holding. */
 export function investedValue(holding: Holding) {

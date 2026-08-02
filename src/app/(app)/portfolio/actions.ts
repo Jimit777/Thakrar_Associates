@@ -155,7 +155,11 @@ export async function refreshPrices(): Promise<RefreshState> {
 
     const { error: updateError } = await supabase
       .from("holdings")
-      .update({ last_price: quote.price, last_refreshed_at: refreshedAt })
+      .update({
+        last_price: quote.price,
+        previous_close: quote.previousClose,
+        last_refreshed_at: refreshedAt,
+      })
       .eq("id", row.id);
 
     if (updateError) failed.push(row.symbol);
