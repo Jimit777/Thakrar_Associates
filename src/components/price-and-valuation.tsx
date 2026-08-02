@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/skeleton";
 import { getPriceHistory } from "@/app/(app)/analyzer/price";
 import { buildScorecard } from "@/lib/scorecard";
 import { computeValuation } from "@/lib/valuation";
-import { selfComparisonRow } from "@/lib/comparison";
+import { computeOwnFigures } from "@/lib/comparison";
 import type { Peers } from "@/lib/peers-schema";
 import type { FinancialRow } from "@/types/financial";
 
@@ -48,13 +48,13 @@ export async function PriceAndValuation({
         initialError={prices.ok ? null : prices.error}
       />
 
-      {/* Peers belong here rather than on the page: the company's own column
+      {/* Peers belong here rather than on the page: the company's own row
           needs the market cap and P/E worked out just above. */}
       <PeerComparison
         stockId={stockId}
         symbol={symbol}
         peers={peers}
-        self={selfComparisonRow(financials, valuation)}
+        own={computeOwnFigures(financials, valuation)}
         generatedAt={peersGeneratedAt}
       />
     </div>
