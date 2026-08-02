@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { PageHeading, EmptyState } from "@/components/page-heading";
 import { SectorAllocation } from "@/components/sector-allocation";
+import { DigestEmailToggle } from "@/components/digest-email-toggle";
 import {
   PortfolioVsIndex,
   PortfolioVsIndexSkeleton,
@@ -70,6 +71,7 @@ export default async function DashboardPage() {
     { data: stocksData },
     { data: documentsData },
     { data: companiesData },
+    { data: settings },
   ] = await Promise.all([
     supabase
       .from("holdings")
@@ -81,6 +83,10 @@ export default async function DashboardPage() {
       .order("created_at", { ascending: false })
       .limit(4),
     supabase.from("companies").select("symbol, sector"),
+    supabase
+      .from("user_settings")
+      .select("digest_email_enabled")
+      .maybeSingle<{ digest_email_enabled: boolean }>(),
   ]);
 
   const holdings: HoldingRow[] = (holdingsData ?? []).map((row) => ({
@@ -306,6 +312,10 @@ export default async function DashboardPage() {
           </div>
         </>
       )}
+
+      <DigestEmailToggle
+        enabled={settings?.digest_email_enabled ?? false}
+      />
 
       {recentDocuments.length > 0 && (
         <section className="mt-6 rounded-lg border border-border bg-surface p-4 sm:p-5">

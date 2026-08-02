@@ -13,7 +13,24 @@ import type { NewsDigest } from "@/lib/news-schema";
  * user already proved they control, and asking for a second one would only be
  * another thing to get wrong.
  */
-async function emailDigest(supabase: SupabaseClient, userId: string) {
+type EmailOutcome = { sent: boolean; skipped?: string; error?: string };
+
+async function emailDigest(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<EmailOutcome> {
+  // Off unless switched on, and a user with no settings row has never switched
+  // it on. The digest is still built either way — this governs delivery only.
+  const { data: settings } = await supabase
+    .from("user_settings")
+    .select("digest_email_enabled")
+    .eq("user_id", userId)
+    .maybeSingle<{ digest_email_enabled: boolean }>();
+
+  if (!settings?.digest_email_enabled) {
+    return { sent: false, skipped: "not enabled" };
+  }
+
   const { data: account } = await supabase.auth.admin.getUserById(userId);
   const to = account?.user?.email;
 
@@ -99,6 +116,7 @@ export async function GET(request: Request) {
     userId: string;
     ok: boolean;
     emailed?: boolean;
+    skipped?: string;
     error?: string;
   }[] = [];
 
@@ -120,6 +138,7 @@ export async function GET(request: Request) {
       userId,
       ok: true,
       emailed: emailed.sent,
+      ...(emailed.skipped ? { skipped: emailed.skipped } : {}),
       ...(emailed.error ? { error: emailed.error } : {}),
     });
   }
