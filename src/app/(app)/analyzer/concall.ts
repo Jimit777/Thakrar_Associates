@@ -1,15 +1,13 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { generateStructured } from "@/lib/gemini";
 import {
   ConcallSummarySchema,
   CONCALL_PROMPT,
   type ConcallSummary,
 } from "@/lib/concall-schema";
-import { BRIEFING_MODEL } from "@/lib/models";
 
 export type ConcallResult =
   | { ok: true; summary: ConcallSummary }
@@ -22,9 +20,6 @@ export type ConcallResult =
  * section to narrow down to, so the page-selection step is skipped.
  */
 export async function summariseConcall(documentId: string): Promise<ConcallResult> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { ok: false, error: "ANTHROPIC_API_KEY is not set." };
-
   const supabase = await createClient();
   const {
     data: { user },
@@ -56,54 +51,22 @@ export async function summariseConcall(documentId: string): Promise<ConcallResul
 
   const pdfBase64 = Buffer.from(await file.arrayBuffer()).toString("base64");
 
-  if (pdfBase64.length > 31_000_000) {
+  // Gemini's inline request body is capped around 20 MB; a larger file would
+  // need the separate files.upload() path, which nothing here implements yet.
+  if (pdfBase64.length > 19_000_000) {
     return { ok: false, error: "This transcript is too large to read in one request." };
   }
 
   try {
-    const stream = client(apiKey).messages.stream({
-      model: BRIEFING_MODEL,
-      // Generous, because internal reasoning shares this ceiling with the
-      // output — the brevity limits live in the schema and prompt.
-      max_tokens: 8000,
-      output_config: {
-        effort: "medium",
-        format: zodOutputFormat(ConcallSummarySchema),
-      },
+    const summary = await generateStructured({
+      tier: "pro",
       system: CONCALL_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "document",
-              source: {
-                type: "base64",
-                media_type: "application/pdf",
-                data: pdfBase64,
-              },
-            },
-            {
-              type: "text",
-              text: `Earnings call transcript for ${document.stocks?.symbol ?? "this company"}, labelled ${document.period_label}. Summarise it.`,
-            },
-          ],
-        },
-      ],
+      prompt: `Earnings call transcript for ${document.stocks?.symbol ?? "this company"}, labelled ${document.period_label}. Summarise it.`,
+      pdfs: [{ base64: pdfBase64 }],
+      schema: ConcallSummarySchema,
+      thinking: "medium",
+      maxOutputTokens: 8000,
     });
-
-    const message = await stream.finalMessage();
-
-    if (message.stop_reason === "refusal") {
-      return { ok: false, error: "Claude declined to summarise this transcript." };
-    }
-
-    const textBlock = message.content.find((block) => block.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
-      return { ok: false, error: "No summary came back. Try again." };
-    }
-
-    const summary = ConcallSummarySchema.parse(JSON.parse(textBlock.text));
 
     const { error } = await supabase.from("concall_summaries").upsert(
       {
@@ -127,10 +90,6 @@ export async function summariseConcall(documentId: string): Promise<ConcallResul
       error: cause instanceof Error ? cause.message : "Couldn't summarise the call.",
     };
   }
-}
-
-function client(apiKey: string) {
-  return new Anthropic({ apiKey });
 }
 
 export async function deleteConcallSummary(formData: FormData) {

@@ -38,7 +38,7 @@ export function DocumentUpload({
     if (file.type !== "application/pdf") return setError("Only PDF files are supported.");
     if (file.size > MAX_UPLOAD_BYTES) {
       return setError(
-        "That file is over 20 MB, which is more than the AI can read in one go. Split it, or upload just the financial statements pages.",
+        "That file is over 13 MB, which is more than the AI can read in one go. Split it, or upload just the financial statements pages.",
       );
     }
     if (!periodLabel) return setError("Enter which period this covers.");

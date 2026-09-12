@@ -1,7 +1,5 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -9,7 +7,7 @@ import {
   NEWS_SEARCH_PROMPT,
   type NewsSearchResults,
 } from "@/lib/news-schema";
-import { BRIEFING_MODEL } from "@/lib/models";
+import { generateStructured } from "@/lib/gemini";
 import { buildDigest } from "@/lib/digest";
 import { renderDigestEmail } from "@/lib/digest-email";
 import { sendEmail } from "@/lib/email";
@@ -27,9 +25,6 @@ export type SearchResult =
  * because it does a fraction of the work.
  */
 export async function searchNews(query: string): Promise<SearchResult> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { ok: false, error: "ANTHROPIC_API_KEY is not set." };
-
   const cleaned = query.trim();
   if (cleaned.length < 2) return { ok: false, error: "Enter something to search for." };
   if (cleaned.length > 120) return { ok: false, error: "That search is too long." };
@@ -41,32 +36,16 @@ export async function searchNews(query: string): Promise<SearchResult> {
   if (!user) return { ok: false, error: "You are signed out." };
 
   try {
-    const stream = new Anthropic({ apiKey }).messages.stream({
-      model: BRIEFING_MODEL,
-      max_tokens: 3000,
-      output_config: { effort: "low", format: zodOutputFormat(NewsSearchSchema) },
+    const results = await generateStructured({
+      tier: "lite",
       system: NEWS_SEARCH_PROMPT,
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 3 }],
-      messages: [
-        {
-          role: "user",
-          content: `Find recent news about: ${cleaned}\n\nToday is ${new Date().toISOString().slice(0, 10)}.`,
-        },
-      ],
+      prompt: `Find recent news about: ${cleaned}\n\nToday is ${new Date().toISOString().slice(0, 10)}.`,
+      schema: NewsSearchSchema,
+      search: true,
+      maxOutputTokens: 3000,
     });
 
-    const message = await stream.finalMessage();
-
-    if (message.stop_reason === "refusal") {
-      return { ok: false, error: "Claude declined this search." };
-    }
-
-    const textBlock = message.content.find((block) => block.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
-      return { ok: false, error: "No results came back." };
-    }
-
-    return { ok: true, results: NewsSearchSchema.parse(JSON.parse(textBlock.text)) };
+    return { ok: true, results };
   } catch (cause) {
     return {
       ok: false,

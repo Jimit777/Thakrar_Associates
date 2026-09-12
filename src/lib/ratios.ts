@@ -25,7 +25,7 @@ const num = (value: number | null | undefined) =>
  *
  * Indian filings rarely print this line: they report revenue, a single "total
  * expenses" figure that already includes interest and depreciation, and profit
- * before tax. Claude is told never to derive figures, so we reconstruct it here
+ * before tax. The model is told never to derive figures, so we reconstruct it here
  * where the arithmetic is visible and repeatable.
  */
 export function operatingProfit(income: Record<string, number | null | undefined>): {

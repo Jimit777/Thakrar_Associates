@@ -64,7 +64,7 @@ async function emailDigest(
   };
 }
 
-// A digest is several web searches and a Sonnet call per user.
+// A digest is several web searches and a model call per user.
 export const maxDuration = 300;
 
 /**

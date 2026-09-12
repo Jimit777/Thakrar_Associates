@@ -6,7 +6,7 @@ import type { ConcallSummary } from "./concall-schema";
 import type { FinancialRow } from "@/types/financial";
 
 /**
- * Builds the facts Claude is allowed to answer from.
+ * Builds the facts the model is allowed to answer from.
  *
  * Only confirmed figures go in — the ones the user reviewed and saved. Nothing
  * is re-read from the PDFs, which is why a question costs a few rupees rather

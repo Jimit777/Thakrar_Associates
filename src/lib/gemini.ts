@@ -51,8 +51,25 @@ export type GeminiRequest<T extends z.ZodType> = {
   /** Omit to leave search off. Grounding is free below Google's monthly quota,
    *  but the pages it pulls back are billed as ordinary input tokens. */
   search?: boolean;
-  /** Reasoning ceiling. "low" is enough for retrieval and classification. */
-  thinking?: "low" | "high";
+  /**
+   * Reasoning ceiling. "low" is enough for retrieval and classification,
+   * "medium" for weighing several pieces of evidence against each other,
+   * "high" for the one call where a misread costs the most: reading figures
+   * out of a dense financial statement.
+   */
+  thinking?: "low" | "medium" | "high";
+  /** Output ceiling. Reasoning tokens are billed at this rate and count
+   *  against it, so a low default would silently truncate a real answer. */
+  maxOutputTokens?: number;
+};
+
+const THINKING_LEVELS: Record<
+  NonNullable<GeminiRequest<z.ZodType>["thinking"]>,
+  ThinkingLevel
+> = {
+  low: ThinkingLevel.LOW,
+  medium: ThinkingLevel.MEDIUM,
+  high: ThinkingLevel.HIGH,
 };
 
 /**
@@ -84,16 +101,33 @@ export async function generateStructured<T extends z.ZodType>(
       responseMimeType: "application/json",
       // Zod is the single source of truth for shape on both providers.
       responseSchema: z.toJSONSchema(request.schema, { target: "draft-7" }),
+      maxOutputTokens: request.maxOutputTokens,
       thinkingConfig: {
-        thinkingLevel:
-          request.thinking === "high" ? ThinkingLevel.HIGH : ThinkingLevel.LOW,
+        thinkingLevel: THINKING_LEVELS[request.thinking ?? "low"],
       },
       ...(request.search ? { tools: [{ googleSearch: {} }] } : {}),
     },
   });
 
+  // A prompt can be blocked before generation starts, or a candidate can stop
+  // early without producing text — the two ways Gemini declines a request.
+  // Neither is an exception on the SDK's side, so both are checked explicitly
+  // rather than assumed away.
+  const blockReason = response.promptFeedback?.blockReason;
+  if (blockReason) {
+    throw new Error(`Gemini declined this request (${blockReason}).`);
+  }
+
+  const finishReason = response.candidates?.[0]?.finishReason;
   const text = response.text;
-  if (!text) throw new Error("Gemini returned no output.");
+
+  if (!text) {
+    throw new Error(
+      finishReason && finishReason !== "STOP"
+        ? `Gemini produced no output (${finishReason}).`
+        : "Gemini returned no output.",
+    );
+  }
 
   return request.schema.parse(JSON.parse(text));
 }

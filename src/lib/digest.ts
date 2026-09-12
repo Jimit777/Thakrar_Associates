@@ -1,8 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NewsDigestSchema, NEWS_PROMPT } from "@/lib/news-schema";
-import { BRIEFING_MODEL } from "@/lib/models";
+import { generateStructured } from "@/lib/gemini";
 
 /**
  * Builds one user's news digest and saves it.
@@ -16,9 +14,6 @@ export async function buildDigest(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<{ error?: string; ok?: boolean; symbols?: string[] }> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set on the server." };
-
   // Holdings only. This is a feed of what bears on money actually at risk —
   // stocks merely being researched would dilute it.
   const [{ data: holdings }, { data: stocks }] = await Promise.all([
@@ -47,40 +42,16 @@ export async function buildDigest(
     })
     .join("\n");
 
-  const client = new Anthropic({ apiKey });
-
   try {
-    const stream = client.messages.stream({
-      model: BRIEFING_MODEL,
-      max_tokens: 8000,
-      output_config: {
-        effort: "medium",
-        format: zodOutputFormat(NewsDigestSchema),
-      },
+    const content = await generateStructured({
+      tier: "pro",
       system: NEWS_PROMPT,
-      // Each search pulls page content into the input, so this cap is the main
-      // lever on what a digest costs.
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 6 }],
-      messages: [
-        {
-          role: "user",
-          content: `These are the Indian listed stocks held in the portfolio. Group them by sector and build the digest.\n\n${roster}\n\nToday is ${new Date().toISOString().slice(0, 10)}. Cover roughly the last week — this is read daily, so older items will already have been seen.`,
-        },
-      ],
+      prompt: `These are the Indian listed stocks held in the portfolio. Group them by sector and build the digest.\n\n${roster}\n\nToday is ${new Date().toISOString().slice(0, 10)}. Cover roughly the last week — this is read daily, so older items will already have been seen.`,
+      schema: NewsDigestSchema,
+      search: true,
+      thinking: "medium",
+      maxOutputTokens: 8000,
     });
-
-    const message = await stream.finalMessage();
-
-    if (message.stop_reason === "refusal") {
-      return { error: "Claude declined to build this digest." };
-    }
-
-    const textBlock = message.content.find((block) => block.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
-      return { error: "No digest came back. Try again." };
-    }
-
-    const content = NewsDigestSchema.parse(JSON.parse(textBlock.text));
 
     const { error } = await supabase.from("news_digests").upsert(
       {

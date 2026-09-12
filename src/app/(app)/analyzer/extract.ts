@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { extractFinancialsFromPdf } from "@/lib/anthropic";
+import { extractFinancialsFromPdf } from "@/lib/extraction";
 import { resolveExtractionModel } from "@/lib/models";
 import { selectFinancialPages } from "@/lib/pdf-sections";
 import type { Extraction, ExtractedPeriod } from "@/lib/extraction-schema";
@@ -18,7 +18,7 @@ export type ExtractResult =
   | { ok: false; error: string };
 
 /**
- * Reads an uploaded PDF and asks Claude for its figures. Nothing is written to
+ * Reads an uploaded PDF and asks the model for its figures. Nothing is written to
  * the database here — the result goes back to the user for review first.
  */
 export async function extractFinancials(
@@ -59,8 +59,9 @@ export async function extractFinancials(
 
   const pdfBase64 = Buffer.from(selection.bytes).toString("base64");
 
-  // The API caps a request at 32 MB, and base64 inflates the file by ~33%.
-  if (pdfBase64.length > 31_000_000) {
+  // Gemini's inline request body is capped around 20 MB; a larger file would
+  // need the separate files.upload() path, which nothing here implements yet.
+  if (pdfBase64.length > 19_000_000) {
     return {
       ok: false,
       error:

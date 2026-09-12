@@ -30,9 +30,14 @@ export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
 };
 
 /**
- * Upload ceiling. Claude's request limit is 32 MB, and encoding a PDF for the
- * API inflates it by about a third — so anything above ~23 MB would be
- * rejected at extraction time. Capped below that to fail at upload instead,
+ * Upload ceiling. Gemini's inline request body is capped around 20 MB, and
+ * base64 inflates a PDF by about a third — so anything above ~14 MB raw would
+ * be rejected at extraction time. Capped below that to fail at upload instead,
  * where the message is clearer.
+ *
+ * Applied the same way regardless of document kind, even though only concall
+ * transcripts and investor presentations are sent whole — annual reports get
+ * trimmed to their financial-statement pages first. A single ceiling low
+ * enough for the untrimmed case is simpler than one that varies by kind.
  */
-export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 13 * 1024 * 1024;

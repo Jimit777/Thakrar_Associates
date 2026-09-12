@@ -338,7 +338,7 @@ export function ExtractionReview({ documentId, stockId, label }: Props) {
 
         {draft.notes && (
           <p className="mt-3 rounded-md border border-border bg-surface-sunken p-3 text-sm leading-relaxed">
-            <span className="stat-label">Claude&apos;s notes</span>
+            <span className="stat-label">Notes</span>
             <br />
             {draft.notes}
           </p>
