@@ -1,11 +1,9 @@
 "use server";
 
-import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { rememberCompanies } from "@/lib/companies";
-import { KEY_POINTS_MODEL } from "@/lib/models";
+import { generateStructured } from "@/lib/gemini";
 import { SectorAssignmentsSchema, SECTOR_PROMPT } from "@/lib/sectors";
 
 export type ClassifyResult = { error?: string; classified?: number };
@@ -18,9 +16,6 @@ export type ClassifyResult = { error?: string; classified?: number };
  * paid for twice. A sector you set yourself is left alone.
  */
 export async function classifySectors(): Promise<ClassifyResult> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "ANTHROPIC_API_KEY is not set on the server." };
-
   const supabase = await createClient();
   const {
     data: { user },
@@ -63,42 +58,18 @@ export async function classifySectors(): Promise<ClassifyResult> {
     })
     .join("\n");
 
-  const client = new Anthropic({ apiKey });
-
   try {
-    const message = await client.messages.create({
-      model: KEY_POINTS_MODEL,
-      max_tokens: 2000,
-      output_config: { format: zodOutputFormat(SectorAssignmentsSchema) },
+    // First call site on Gemini. Classification is the right one to move first:
+    // it is short, it is cheap, the answer is easy to eyeball, and if it fails
+    // nothing the user has stored is lost.
+    const { assignments } = await generateStructured({
+      tier: "lite",
       system: SECTOR_PROMPT,
-      tools: [
-        {
-          type: "web_search_20260209",
-          name: "web_search",
-          max_uses: 2,
-          allowed_callers: ["direct"],
-        },
-      ],
-      messages: [
-        {
-          role: "user",
-          content: `Classify these Indian listed companies:\n\n${roster}`,
-        },
-      ],
+      prompt: `Classify these Indian listed companies:\n\n${roster}`,
+      schema: SectorAssignmentsSchema,
+      search: true,
+      thinking: "low",
     });
-
-    if (message.stop_reason === "refusal") {
-      return { error: "Claude declined to classify these." };
-    }
-
-    const textBlock = message.content.find((block) => block.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
-      return { error: "Nothing came back. Try again." };
-    }
-
-    const { assignments } = SectorAssignmentsSchema.parse(
-      JSON.parse(textBlock.text),
-    );
 
     // Only the ones actually asked about — a symbol we didn't send back is not
     // something to write.

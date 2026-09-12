@@ -17,7 +17,6 @@ const HISTORY_LIMIT = 20;
  * It's a research preview, so a failure falls back to the standard endpoint
  * rather than breaking the chat.
  */
-const FAST_MODE_BETA = "fast-mode-2026-02-01";
 
 /**
  * Whether a question needs looking things up, which decides the model, the
@@ -51,24 +50,20 @@ async function needsResearch(
 }
 
 /**
- * Always the beta endpoint so the response types line up whether or not fast
- * mode is in play — mixing the two produces incompatible content blocks.
+ * Both paths run on Sonnet now, differing in how hard they are allowed to work:
+ * a research question pulls in web pages and gets a larger search budget, a
+ * figure question reads a small block of already-confirmed numbers.
+ *
+ * The quick path used to be Opus, picked for speed rather than for reasoning.
+ * That made it the single largest line on the bill for work that is mostly
+ * retrieval from context the model has already been handed.
  */
 function openStream(
   client: Anthropic,
   conversation: Anthropic.Beta.BetaMessageParam[],
   system: Anthropic.Beta.BetaTextBlockParam[],
-  fast: boolean,
   research: boolean,
 ) {
-  // Research questions pull in web pages and run longer, so their token count
-  // is what drives cost — the cheaper model matters most there. Questions about
-  // the user's own figures are small, so they stay on the faster model where
-  // latency is what the user notices.
-  //
-  // Fast mode is an Opus feature, so it only applies to the quick path.
-  const useFast = fast && !research;
-
   return client.beta.messages.stream({
     model: research ? BRIEFING_MODEL : ANALYSIS_MODEL,
     max_tokens: research ? 2500 : 2000,
@@ -88,7 +83,6 @@ function openStream(
       },
     ],
     messages: conversation,
-    ...(useFast ? { speed: "fast" as const, betas: [FAST_MODE_BETA] } : {}),
   });
 }
 
@@ -204,8 +198,6 @@ export async function POST(request: Request) {
 
   const status = (label: string) => frame({ type: "status", label });
 
-  let fastMode = true;
-
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
@@ -217,13 +209,7 @@ export async function POST(request: Request) {
         // Web search runs on Anthropic's side. A long search can pause the
         // turn, which is resumed by sending the conversation back unchanged.
         for (let attempt = 0; attempt < 4; attempt += 1) {
-          const stream = openStream(
-            client,
-            conversation,
-            systemBlocks,
-            fastMode,
-            research,
-          );
+          const stream = openStream(client, conversation, systemBlocks, research);
 
           controller.enqueue(status(attempt === 0 ? "Thinking" : "Still working"));
 
@@ -266,40 +252,12 @@ export async function POST(request: Request) {
           conversation.push({ role: "assistant", content: final.content });
         }
       } catch (cause) {
-        // Fast mode is a preview and may not be enabled on every account.
-        // Retry once at standard speed before surfacing an error.
-        if (fastMode && !answer) {
-          fastMode = false;
-          try {
-            const stream = openStream(
-              client,
-              [...priorMessages, { role: "user", content: message }],
-              systemBlocks,
-              false,
-              research,
-            );
-
-            for await (const event of stream) {
-              if (
-                event.type === "content_block_delta" &&
-                event.delta.type === "text_delta"
-              ) {
-                answer += event.delta.text;
-                controller.enqueue(encoder.encode(event.delta.text));
-              }
-            }
-          } catch (retryCause) {
-            const text =
-              retryCause instanceof Error
-                ? retryCause.message
-                : "Something went wrong.";
-            controller.enqueue(encoder.encode(`\n\n[Error: ${text}]`));
-          }
-        } else {
-          const text =
-            cause instanceof Error ? cause.message : "Something went wrong.";
-          controller.enqueue(encoder.encode(`\n\n[Error: ${text}]`));
-        }
+        // The retry that used to live here existed only to fall back when fast
+        // mode wasn't enabled on the account. Without fast mode it would repeat
+        // the identical request and fail the same way, so it is gone.
+        const text =
+          cause instanceof Error ? cause.message : "Something went wrong.";
+        controller.enqueue(encoder.encode(`\n\n[Error: ${text}]`));
       } finally {
         controller.close();
 

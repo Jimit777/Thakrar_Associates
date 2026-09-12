@@ -27,8 +27,17 @@ export type ExtractionModelId = (typeof EXTRACTION_MODELS)[number]["id"];
 
 export const DEFAULT_EXTRACTION_MODEL: ExtractionModelId = "claude-sonnet-5";
 
-/** Model used for the per-stock chat. */
-export const ANALYSIS_MODEL = "claude-opus-5";
+/**
+ * The quick path in the per-stock chat: questions answerable from the user's
+ * own confirmed figures.
+ *
+ * This was Opus, chosen for latency rather than intelligence. But a figure
+ * question is mostly retrieval from a small block of numbers already handed to
+ * the model, and Opus is five times Sonnet's input price and nearly double its
+ * output price for work that doesn't need it. It was the largest single line on
+ * the bill and the easiest to move.
+ */
+export const ANALYSIS_MODEL = "claude-sonnet-5";
 
 /**
  * The briefing runs on Sonnet rather than Opus. It is a summarising job over
