@@ -1,7 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { createClient } from "@/lib/supabase/server";
 import { buildStockContext, CHAT_SYSTEM_PROMPT } from "@/lib/chat-context";
-import { ANALYSIS_MODEL, BRIEFING_MODEL, CLASSIFIER_MODEL } from "@/lib/models";
+import { GEMINI_MODELS } from "@/lib/gemini";
 import { fetchPriceSummary } from "@/lib/prices";
 import { sortByPeriod } from "@/lib/periods";
 import { normaliseFigures, type FinancialRow } from "@/types/financial";
@@ -12,36 +12,33 @@ export const maxDuration = 120;
 /** Only the recent exchanges are replayed, to keep each request small. */
 const HISTORY_LIMIT = 20;
 
-/**
- * Fast mode runs the same model at a higher output speed for a premium rate.
- * It's a research preview, so a failure falls back to the standard endpoint
- * rather than breaking the chat.
- */
+type ChatContent = { role: "user" | "model"; parts: { text: string }[] };
 
 /**
  * Whether a question needs looking things up, which decides the model, the
- * effort and the search budget.
+ * thinking level, and whether search is worth enabling at all.
  *
  * This used to be a keyword list, which missed anything phrased differently —
  * "how is it doing against others in pharma" contains none of the obvious
- * words. A cheap, fast model classifies it instead: one word out, a few
- * hundred tokens, far more reliable than matching strings.
+ * words. A cheap model classifies it instead: one word out, a few hundred
+ * tokens, far more reliable than matching strings.
  */
-async function needsResearch(
-  client: Anthropic,
-  question: string,
-): Promise<boolean> {
+async function needsResearch(ai: GoogleGenAI, question: string): Promise<boolean> {
   try {
-    const response = await client.messages.create({
-      model: CLASSIFIER_MODEL,
-      max_tokens: 5,
-      system:
-        "Decide whether answering the question requires looking up information outside a single company's own financial statements — for example other companies, industry context, news, management commentary, or market valuation. Questions answerable from that one company's own reported figures or its share price do not. Reply with exactly one word: RESEARCH or FIGURES.",
-      messages: [{ role: "user", content: question }],
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODELS.lite,
+      contents: [{ role: "user", parts: [{ text: question }] }],
+      config: {
+        systemInstruction:
+          "Decide whether answering the question requires looking up information outside a single company's own financial statements — for example other companies, industry context, news, management commentary, or market valuation. Questions answerable from that one company's own reported figures or its share price do not. Reply with exactly one word: RESEARCH or FIGURES.",
+        maxOutputTokens: 200,
+        // Minimal on purpose: a one-word classification doesn't need to reason,
+        // and every reasoning token here is spent on every single message sent.
+        thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+      },
     });
 
-    const text = response.content.find((block) => block.type === "text");
-    return text?.type === "text" && text.text.toUpperCase().includes("RESEARCH");
+    return (response.text ?? "").toUpperCase().includes("RESEARCH");
   } catch {
     // If the check fails, assume research: answering thinly is worse than
     // spending a little more.
@@ -50,47 +47,44 @@ async function needsResearch(
 }
 
 /**
- * Both paths run on Sonnet now, differing in how hard they are allowed to work:
- * a research question pulls in web pages and gets a larger search budget, a
- * figure question reads a small block of already-confirmed numbers.
+ * Both paths run on the same model tier, differing in how hard they are
+ * allowed to work: a research question gets a higher thinking level and a
+ * larger output ceiling, a figure question reads a small block of
+ * already-confirmed numbers and doesn't need either.
  *
- * The quick path used to be Opus, picked for speed rather than for reasoning.
- * That made it the single largest line on the bill for work that is mostly
- * retrieval from context the model has already been handed.
+ * Unlike Anthropic's server-side search, Gemini's grounding runs entirely
+ * inside one streamed call — there is no paused turn to resume, so the retry
+ * loop that existed for that has no equivalent here.
  */
 function openStream(
-  client: Anthropic,
-  conversation: Anthropic.Beta.BetaMessageParam[],
-  system: Anthropic.Beta.BetaTextBlockParam[],
+  ai: GoogleGenAI,
+  contents: ChatContent[],
+  system: string,
   research: boolean,
 ) {
-  return client.beta.messages.stream({
-    model: research ? BRIEFING_MODEL : ANALYSIS_MODEL,
-    max_tokens: research ? 2500 : 2000,
-    // Summarised reasoning is streamed to the user. Billing is unchanged by
-    // this — the model thinks either way; without it the wait just looks like
-    // a stall.
-    thinking: { type: "adaptive", display: "summarized" },
-    // Medium is enough to keep the model reaching for search; high mostly
-    // bought extra internal reasoning, which is billed at output rates.
-    output_config: { effort: research ? "medium" : "low" },
-    system,
-    tools: [
-      {
-        type: "web_search_20260209",
-        name: "web_search",
-        max_uses: research ? 5 : 3,
+  return ai.models.generateContentStream({
+    model: GEMINI_MODELS.pro,
+    contents,
+    config: {
+      systemInstruction: system,
+      maxOutputTokens: research ? 2500 : 2000,
+      // Summarised reasoning is streamed to the user. Billing is unchanged by
+      // this — the model thinks either way; without it the wait just looks
+      // like a stall.
+      thinkingConfig: {
+        includeThoughts: true,
+        thinkingLevel: research ? ThinkingLevel.MEDIUM : ThinkingLevel.LOW,
       },
-    ],
-    messages: conversation,
+      tools: [{ googleSearch: {} }],
+    },
   });
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return Response.json(
-      { error: "ANTHROPIC_API_KEY is not set on the server." },
+      { error: "GEMINI_API_KEY is not set on the server." },
       { status: 500 },
     );
   }
@@ -121,8 +115,8 @@ export async function POST(request: Request) {
   if (!stock) return Response.json({ error: "Stock not found." }, { status: 404 });
 
   // All three run together. The price lookup used to run after the database
-  // queries, adding its round trip to every single message before Claude was
-  // even called.
+  // queries, adding its round trip to every single message before the model
+  // was even called.
   const [
     { data: financialsData },
     { data: historyData },
@@ -154,7 +148,6 @@ export async function POST(request: Request) {
     })),
   );
 
-
   const context = buildStockContext({
     symbol: stock.symbol,
     name: stock.name,
@@ -167,29 +160,22 @@ export async function POST(request: Request) {
     })),
   });
 
-  const priorMessages = (historyData ?? [])
+  const priorMessages: ChatContent[] = (historyData ?? [])
     .reverse()
     .map((row) => ({
-      role: row.role as "user" | "assistant",
-      content: row.content,
+      role: row.role === "assistant" ? ("model" as const) : ("user" as const),
+      parts: [{ text: row.content as string }],
     }));
 
-  const client = new Anthropic({ apiKey });
+  const ai = new GoogleGenAI({ apiKey });
 
-  const systemBlocks: Anthropic.Beta.BetaTextBlockParam[] = [
-    { type: "text", text: CHAT_SYSTEM_PROMPT },
-    {
-      type: "text",
-      text: `Here are the confirmed figures for this stock:\n\n${context}`,
-      // The figures rarely change between questions, so caching this makes
-      // follow-up questions cheaper.
-      cache_control: { type: "ephemeral" },
-    },
-  ];
+  // One system string rather than Anthropic's blocks-with-cache_control: Gemini
+  // caches a repeated prefix automatically, with no setup needed on our side.
+  const system = `${CHAT_SYSTEM_PROMPT}\n\nHere are the confirmed figures for this stock:\n\n${context}`;
 
   const encoder = new TextEncoder();
   let answer = "";
-  const research = await needsResearch(client, message);
+  const research = await needsResearch(ai, message);
 
   // Status updates travel on the same stream as the answer, wrapped in record
   // separators so the client can tell them apart from the reply text.
@@ -201,60 +187,42 @@ export async function POST(request: Request) {
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        const conversation: Anthropic.Beta.BetaMessageParam[] = [
+        const contents: ChatContent[] = [
           ...priorMessages,
-          { role: "user", content: message },
+          { role: "user", parts: [{ text: message }] },
         ];
 
-        // Web search runs on Anthropic's side. A long search can pause the
-        // turn, which is resumed by sending the conversation back unchanged.
-        for (let attempt = 0; attempt < 4; attempt += 1) {
-          const stream = openStream(client, conversation, systemBlocks, research);
+        controller.enqueue(status("Thinking"));
+        if (research) controller.enqueue(status("Searching the web"));
 
-          controller.enqueue(status(attempt === 0 ? "Thinking" : "Still working"));
+        const stream = await openStream(ai, contents, system, research);
 
-          for await (const event of stream) {
-            if (
-              event.type === "content_block_start" &&
-              event.content_block.type === "server_tool_use"
-            ) {
-              controller.enqueue(status("Searching the web"));
+        let finishReason: string | undefined;
+
+        for await (const chunk of stream) {
+          const candidate = chunk.candidates?.[0];
+          finishReason = candidate?.finishReason ?? finishReason;
+
+          for (const part of candidate?.content?.parts ?? []) {
+            if (part.thought && part.text) {
+              controller.enqueue(frame({ type: "thinking", text: part.text }));
+              continue;
             }
 
-            if (
-              event.type === "content_block_delta" &&
-              event.delta.type === "thinking_delta"
-            ) {
-              controller.enqueue(
-                frame({ type: "thinking", text: event.delta.thinking }),
-              );
-            }
-
-            if (
-              event.type === "content_block_delta" &&
-              event.delta.type === "text_delta"
-            ) {
+            if (part.text) {
               if (!answer) controller.enqueue(status("Writing"));
-              answer += event.delta.text;
-              controller.enqueue(encoder.encode(event.delta.text));
+              answer += part.text;
+              controller.enqueue(encoder.encode(part.text));
             }
           }
+        }
 
-          const final = await stream.finalMessage();
-
-          if (final.stop_reason === "refusal" && !answer) {
-            controller.enqueue(encoder.encode("I can't help with that request."));
-            break;
-          }
-
-          if (final.stop_reason !== "pause_turn") break;
-
-          conversation.push({ role: "assistant", content: final.content });
+        // A response blocked before producing any text — the closest
+        // equivalent to Anthropic's stop_reason "refusal".
+        if (!answer && finishReason && finishReason !== "STOP") {
+          controller.enqueue(encoder.encode("I can't help with that request."));
         }
       } catch (cause) {
-        // The retry that used to live here existed only to fall back when fast
-        // mode wasn't enabled on the account. Without fast mode it would repeat
-        // the identical request and fail the same way, so it is gone.
         const text =
           cause instanceof Error ? cause.message : "Something went wrong.";
         controller.enqueue(encoder.encode(`\n\n[Error: ${text}]`));
