@@ -99,8 +99,15 @@ export async function generateStructured<T extends z.ZodType>(
     config: {
       systemInstruction: request.system,
       responseMimeType: "application/json",
-      // Zod is the single source of truth for shape on both providers.
-      responseSchema: z.toJSONSchema(request.schema, { target: "draft-7" }),
+      // Zod is the single source of truth for shape on both providers, but the
+      // target matters: "draft-7" adds a top-level $schema key that Gemini's
+      // API rejects outright, and represents a nullable field as
+      // anyOf: [{type}, {type: "null"}], which Gemini's schema format — a
+      // subset of OpenAPI 3.0 — doesn't understand either. "openapi-3.0"
+      // avoids both: no $schema key, and nullable becomes { type, nullable:
+      // true }, which is exactly what Gemini expects. Since nearly every
+      // field in the extraction schema is nullable, this was not cosmetic.
+      responseSchema: z.toJSONSchema(request.schema, { target: "openapi-3.0" }),
       maxOutputTokens: request.maxOutputTokens,
       thinkingConfig: {
         thinkingLevel: THINKING_LEVELS[request.thinking ?? "low"],
